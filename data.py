@@ -107,12 +107,9 @@ class DataManager:
                 since = int(start_dt.astimezone(pytz.UTC).timestamp() * 1000)
                 st.info(f"开始时间(北京): {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
-                # 默认获取过去3年的数据
-                now = datetime.now(self.beijing_tz)
-                start_dt = now - timedelta(days=self.default_lookback_days)
-                since = int(start_dt.astimezone(pytz.UTC).timestamp() * 1000)
-                st.info(f"未指定开始时间，默认获取过去{self.default_lookback_days}天数据")
-                st.info(f"开始时间(北京): {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+                # 如果未指定开始时间，则获取尽可能多的历史数据
+                st.info("未指定开始时间，将获取尽可能多的历史数据")
+                since = 0  # 从最早的数据开始
                 
             if end_time:
                 if isinstance(end_time, str):
@@ -283,16 +280,52 @@ def render_data_ui(config):
     col1, col2 = st.columns(2)
     
     with col1:
-        # 默认开始时间为3年前
-        default_start = (datetime.now() - timedelta(days=1095)).strftime("%Y-%m-%d %H:%M:%S")
-        start_time = st.text_input("开始时间 (北京时间)", value=default_start, 
-                                 help="格式: YYYY-MM-DD HH:MM:SS")
+        # 默认不设置开始时间，让用户完全自定义
+        start_time = st.text_input("开始时间 (北京时间)", 
+                                 help="格式: YYYY-MM-DD HH:MM:SS，例如：2020-01-01 00:00:00。留空则尝试获取所有历史数据。")
     
     with col2:
         # 默认结束时间为当前时间
         default_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         end_time = st.text_input("结束时间 (北京时间)", value=default_end,
-                               help="格式: YYYY-MM-DD HH:MM:SS")
+                               help="格式: YYYY-MM-DD HH:MM:SS。留空则获取到最新数据。")
+    
+    # 选择时间范围快捷按钮
+    st.subheader("快速选择时间范围")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("最近1年"):
+            st.session_state.quick_start_time = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state.quick_end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.rerun()
+    
+    with col2:
+        if st.button("最近3年"):
+            st.session_state.quick_start_time = (datetime.now() - timedelta(days=1095)).strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state.quick_end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.rerun()
+    
+    with col3:
+        if st.button("最近5年"):
+            st.session_state.quick_start_time = (datetime.now() - timedelta(days=1825)).strftime("%Y-%m-%d %H:%M:%S")
+            st.session_state.quick_end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.rerun()
+    
+    with col4:
+        if st.button("所有历史数据"):
+            st.session_state.quick_start_time = ""
+            st.session_state.quick_end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.rerun()
+    
+    # 应用快速选择的时间范围
+    if hasattr(st.session_state, 'quick_start_time'):
+        start_time = st.session_state.quick_start_time
+        delattr(st.session_state, 'quick_start_time')
+    
+    if hasattr(st.session_state, 'quick_end_time'):
+        end_time = st.session_state.quick_end_time
+        delattr(st.session_state, 'quick_end_time')
     
     # 数据获取按钮
     if st.button("获取K线数据"):

@@ -123,9 +123,20 @@ def render_config_ui():
         
         st.subheader("数据设置")
         data_config = config.get("data", {})
-        max_candles = st.number_input("最大K线数量", 
-                                    min_value=100, max_value=5000, 
-                                    value=data_config.get("max_candles", 1000))
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            default_lookback = st.number_input("默认回溯天数", 
+                                          min_value=1, max_value=3650, 
+                                          value=data_config.get("default_lookback_days", 1095),
+                                          help="获取数据时，如果未指定开始时间，默认回溯的天数。设置为1095可获取3年数据，1825可获取5年数据。")
+        
+        with col2:
+            max_candles = st.number_input("最大K线数量", 
+                                       min_value=1000, max_value=10000000, 
+                                       value=data_config.get("max_candles", 1000000),
+                                       help="获取数据的最大K线数量限制，设置较大值可确保获取完整的历史数据。1小时K线，3年约有26280根，5年约有43800根。")
         
         submitted = st.form_submit_button("保存配置")
         
@@ -155,7 +166,7 @@ def render_config_ui():
                     "https_proxy": http_proxy
                 },
                 "data": {
-                    "default_lookback_days": data_config.get("default_lookback_days", 30),
+                    "default_lookback_days": default_lookback,
                     "max_candles": max_candles
                 }
             }
