@@ -16,3 +16,5 @@ trading:
   is_futures: true
   symbol: BTC/USDT:USDT
   timeframe: 1h
+data:
+  cache_dir: data
