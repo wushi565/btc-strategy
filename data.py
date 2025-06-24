@@ -1,4 +1,4 @@
-import ccxt
+﻿import ccxt
 import pandas as pd
 import numpy as np
 import pytz
@@ -30,8 +30,9 @@ class DataManager:
         self.http_proxy = self.network_config.get("http_proxy", "")
         self.https_proxy = self.network_config.get("https_proxy", "")
         
-        self.max_candles = self.data_config.get("max_candles", 1000)
-        self.default_lookback_days = self.data_config.get("default_lookback_days", 30)
+        # 不限制最大K线数量
+        self.max_candles = 1000000  # 设置一个很大的值，实际上不限制
+        self.default_lookback_days = self.data_config.get("default_lookback_days", 1095)  # 默认3年
         
         # 设置代理
         if self.http_proxy:
@@ -106,7 +107,7 @@ class DataManager:
                 since = int(start_dt.astimezone(pytz.UTC).timestamp() * 1000)
                 st.info(f"开始时间(北京): {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
-                # 默认获取过去30天的数据
+                # 默认获取过去3年的数据
                 now = datetime.now(self.beijing_tz)
                 start_dt = now - timedelta(days=self.default_lookback_days)
                 since = int(start_dt.astimezone(pytz.UTC).timestamp() * 1000)
@@ -201,12 +202,7 @@ class DataManager:
                     if end_ts and fetch_since > end_ts:
                         st.info("已达到结束时间，停止获取")
                         break
-                        
-                    # 检查是否已超过最大K线数量
-                    if len(all_ohlcv) >= self.max_candles:
-                        st.warning(f"已达到最大K线数量限制 ({self.max_candles})，停止获取")
-                        break
-                        
+                    
                     # 稍作延迟，避免API请求过快
                     time.sleep(0.5)
                     
@@ -243,6 +239,33 @@ class DataManager:
             st.error(traceback.format_exc())
             return None
 
+    def export_to_excel(self, df, filename=None):
+        """
+        导出数据到Excel文件
+        
+        参数:
+            df (pandas.DataFrame): 要导出的数据
+            filename (str): 文件名，如果为None，则自动生成
+            
+        返回:
+            str: 导出的文件路径
+        """
+        try:
+            if filename is None:
+                # 生成文件名
+                symbol = self.symbol.replace('/', '_').replace(':', '_')
+                timeframe = self.timeframe
+                start_date = df.index.min().strftime('%Y%m%d')
+                end_date = df.index.max().strftime('%Y%m%d')
+                filename = f"{symbol}_{timeframe}_{start_date}_to_{end_date}.xlsx"
+            
+            # 导出到Excel
+            df.to_excel(filename)
+            return filename
+        except Exception as e:
+            st.error(f"导出到Excel失败: {e}")
+            return None
+
 def render_data_ui(config):
     """渲染数据获取UI界面"""
     
@@ -260,8 +283,8 @@ def render_data_ui(config):
     col1, col2 = st.columns(2)
     
     with col1:
-        # 默认开始时间为30天前
-        default_start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        # 默认开始时间为3年前
+        default_start = (datetime.now() - timedelta(days=1095)).strftime("%Y-%m-%d %H:%M:%S")
         start_time = st.text_input("开始时间 (北京时间)", value=default_start, 
                                  help="格式: YYYY-MM-DD HH:MM:SS")
     
@@ -295,6 +318,12 @@ def render_data_ui(config):
                 st.write(f"开始时间: {df.index.min()}")
                 st.write(f"结束时间: {df.index.max()}")
                 
+                # 添加导出按钮
+                if st.button("导出到Excel"):
+                    filename = data_manager.export_to_excel(df)
+                    if filename:
+                        st.success(f"数据已成功导出到: {filename}")
+                
                 return df
             else:
                 st.error("获取数据失败或数据为空")
@@ -308,6 +337,12 @@ def render_data_ui(config):
         # 显示数据预览按钮
         if st.button("显示数据预览"):
             st.dataframe(df.head())
+        
+        # 添加导出按钮
+        if st.button("导出到Excel"):
+            filename = data_manager.export_to_excel(df)
+            if filename:
+                st.success(f"数据已成功导出到: {filename}")
             
         return df
     
