@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import streamlit as st
 import time
 import traceback
+import os
 from utils import format_datetime, set_proxy, test_proxy
 
 class DataManager:
@@ -28,6 +29,11 @@ class DataManager:
         
         self.http_proxy = self.network_config.get("http_proxy", "")
         self.https_proxy = self.network_config.get("https_proxy", "")
+
+        # 缓存目录
+        self.data_config = config.get("data", {})
+        self.cache_dir = self.data_config.get("cache_dir", "data")
+        os.makedirs(self.cache_dir, exist_ok=True)
         
         # 设置代理
         if self.http_proxy:
@@ -65,6 +71,14 @@ class DataManager:
         except Exception as e:
             st.error(f"初始化交易所失败: {e}")
             raise
+
+    def _get_cache_file(self, start_dt, end_dt):
+        """生成缓存文件路径"""
+        start_str = start_dt.strftime("%Y%m%d") if start_dt else "start"
+        end_str = end_dt.strftime("%Y%m%d") if end_dt else "latest"
+        symbol = self.symbol.replace('/', '_').replace(':', '_')
+        filename = f"{symbol}_{self.timeframe}_{start_str}_to_{end_str}.csv"
+        return os.path.join(self.cache_dir, filename)
     
     def test_connection(self):
         """测试交易所连接"""
@@ -92,8 +106,10 @@ class DataManager:
         try:
             market_type = "合约" if self.is_futures else "现货"
             st.info(f"正在获取{market_type}交易对 {self.symbol} 的 {self.timeframe} K线数据...")
-            
+
             # 时间转换
+            start_dt = None
+            end_dt = None
             if start_time:
                 if isinstance(start_time, str):
                     start_dt = self.beijing_tz.localize(datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S"))
@@ -116,6 +132,15 @@ class DataManager:
             else:
                 end_ts = None
                 st.info("未指定结束时间，获取至最新数据")
+                end_dt = None
+
+            # 检查本地缓存
+            cache_file = self._get_cache_file(start_dt if start_time else None, end_dt if end_time else None)
+            if os.path.isfile(cache_file):
+                st.success(f"从缓存加载数据: {cache_file}")
+                df = pd.read_csv(cache_file, index_col="timestamp", parse_dates=["timestamp"])
+                df.index = df.index.tz_localize(pytz.UTC).tz_convert(self.beijing_tz)
+                return df
             
             # 验证交易对是否支持
             try:
@@ -220,10 +245,20 @@ class DataManager:
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
             df["timestamp"] = df["timestamp"].dt.tz_localize("UTC").dt.tz_convert(self.beijing_tz)
             df.set_index("timestamp", inplace=True)
-            
+
             # 显示数据范围
             st.info(f"数据时间范围: {df.index.min()} 至 {df.index.max()}")
-            
+
+            # 保存到缓存
+            cache_file = self._get_cache_file(start_dt if start_time else None, end_dt if end_time else None)
+            try:
+                save_df = df.copy()
+                save_df.index = save_df.index.tz_convert(pytz.UTC)
+                save_df.to_csv(cache_file)
+                st.info(f"数据已缓存至 {cache_file}")
+            except Exception as e:
+                st.warning(f"缓存数据失败: {e}")
+
             return df
             
         except Exception as e:
