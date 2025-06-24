@@ -2,9 +2,6 @@ capital:
   initial_capital: 10000.0
   leverage: 3.0
   risk_per_trade: 1.0
-data:
-  default_lookback_days: 1095
-  max_candles: 1000000
 indicators:
   atr_multiplier: 3.0
   atr_period: 34

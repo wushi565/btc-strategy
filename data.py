@@ -1,4 +1,4 @@
-﻿import ccxt
+import ccxt
 import pandas as pd
 import numpy as np
 import pytz
@@ -21,7 +21,6 @@ class DataManager:
         self.config = config
         self.trading_config = config.get("trading", {})
         self.network_config = config.get("network", {})
-        self.data_config = config.get("data", {})
         
         self.symbol = self.trading_config.get("symbol", "BTC/USDT:USDT")
         self.timeframe = self.trading_config.get("timeframe", "1h")
@@ -29,10 +28,6 @@ class DataManager:
         
         self.http_proxy = self.network_config.get("http_proxy", "")
         self.https_proxy = self.network_config.get("https_proxy", "")
-        
-        # 不限制最大K线数量
-        self.max_candles = 1000000  # 设置一个很大的值，实际上不限制
-        self.default_lookback_days = self.data_config.get("default_lookback_days", 1095)  # 默认3年
         
         # 设置代理
         if self.http_proxy:
@@ -380,7 +375,6 @@ def render_data_ui(config):
         return df
     
     return None
-
 if __name__ == "__main__":
     # 测试数据获取UI
     import yaml
