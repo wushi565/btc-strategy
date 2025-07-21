@@ -1,10 +1,299 @@
 ﻿import pandas as pd
 import numpy as np
-import streamlit as st
-from indicators import IndicatorCalculator
+from datetime import datetime
+from abc import ABC, abstractmethod
+
+__all__ = ['Strategy', 'SupertrendDEMAStrategy', 'SupertrendDEMAAdxStrategy', 'StrategyFactory', 'SignalGenerator', 'analyze_signals']
+
+class Strategy(ABC):
+    """策略抽象基类"""
+    
+    def __init__(self, config):
+        """
+        初始化策略
+        
+        参数:
+            config (dict): 配置信息
+        """
+        self.config = config
+        self.signals_config = config.get("signals", {})
+        # 获取风险回报比
+        self.risk_reward_ratio = self.signals_config.get("risk_reward_ratio", 3.0)
+        
+    @abstractmethod
+    def generate_signals(self, df):
+        """生成交易信号"""
+        pass
+    
+    def calculate_risk_reward(self, signals_df):
+        """
+        计算风险回报比
+        
+        参数:
+            signals_df (pd.DataFrame): 包含信号和止损的数据
+            
+        返回:
+            pd.DataFrame: 添加了目标价格的数据
+        """
+            # 创建副本避免修改原始数据
+        signals_df = signals_df.copy()
+            
+        # 为多头信号计算目标价格
+        # 目标价格 = 入场价格 + (入场价格 - 止损价格) * 风险回报比
+        buy_signal_mask = signals_df["buy_signal"]
+        if buy_signal_mask.any():
+            entry_price = signals_df.loc[buy_signal_mask, "close"]
+            stop_loss = signals_df.loc[buy_signal_mask, "stop_loss_buy"]
+            risk_distance = entry_price - stop_loss
+            target_price = entry_price + risk_distance * self.risk_reward_ratio
+            signals_df.loc[buy_signal_mask, "target_price_buy"] = target_price
+        
+        # 为空头信号计算目标价格
+        # 目标价格 = 入场价格 - (止损价格 - 入场价格) * 风险回报比
+        sell_signal_mask = signals_df["sell_signal"]
+        if sell_signal_mask.any():
+            entry_price = signals_df.loc[sell_signal_mask, "close"]
+            stop_loss = signals_df.loc[sell_signal_mask, "stop_loss_sell"]
+            risk_distance = stop_loss - entry_price
+            target_price = entry_price - risk_distance * self.risk_reward_ratio
+            signals_df.loc[sell_signal_mask, "target_price_sell"] = target_price
+        
+        return signals_df
+
+class SupertrendDEMAStrategy(Strategy):
+    """基于Supertrend和DEMA的策略"""
+    
+    def generate_signals(self, df):
+        """
+        生成交易信号：
+        1. Supertrend出现买入信号
+        2. 价格突破DEMA144和DEMA169做多
+        3. 止损在DEMA169线上
+        4. 做空信号则相反，止损在DEMA144线上
+        
+        参数:
+            df (pd.DataFrame): 包含指标数据的DataFrame
+            
+        返回:
+            pd.DataFrame: 添加了信号的DataFrame
+        """
+            # 创建副本避免修改原始数据
+        signals_df = df.copy()
+            
+        # 初始化信号列
+        signals_df["buy_signal"] = False
+        signals_df["sell_signal"] = False
+        signals_df["position"] = 0  # 0表示无持仓，1表示多头，-1表示空头
+        signals_df["trade_action"] = None  # 记录交易动作
+        
+        # 获取当前状态
+        current_position = None
+        
+        # 遍历数据生成信号
+        for i in range(1, len(signals_df)):
+            # 读取当前行和前一行的数据
+            prev = signals_df.iloc[i-1]
+            curr = signals_df.iloc[i]
+            
+            # 买入信号: 
+            # 1. Supertrend出现买入信号
+            # 2. 价格突破DEMA144和DEMA169
+            buy_condition = (
+                # Supertrend买入信号
+                curr["supertrend_buy"] and
+                # 价格突破DEMA144和DEMA169
+                (curr["close"] > curr["dema144"]) and (curr["close"] > curr["dema169"])
+            )
+            
+            # 卖出信号:
+            # 1. Supertrend出现卖出信号
+            # 2. 价格跌破DEMA144和DEMA169
+            sell_condition = (
+                # Supertrend卖出信号
+                curr["supertrend_sell"] and
+                # 价格跌破DEMA144和DEMA169
+                (curr["close"] < curr["dema144"]) and (curr["close"] < curr["dema169"])
+            )
+            
+            # 设置信号，考虑当前持仓状态
+            # 只有当没有持仓时才生成新的开仓信号
+            if buy_condition and current_position is None:
+                signals_df.loc[signals_df.index[i], "buy_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = 1
+                signals_df.loc[signals_df.index[i], "trade_action"] = "开多"
+                current_position = "long"
+            elif sell_condition and current_position is None:
+                signals_df.loc[signals_df.index[i], "sell_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = -1
+                signals_df.loc[signals_df.index[i], "trade_action"] = "开空"
+                current_position = "short"
+            
+            # 止损逻辑：如果持有多头仓位且价格跌破DEMA169
+            elif current_position == "long" and curr["close"] < curr["dema169"]:
+                signals_df.loc[signals_df.index[i], "sell_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = 0
+                signals_df.loc[signals_df.index[i], "trade_action"] = "平多止损"
+                current_position = None  # 平仓
+            # 止损逻辑：如果持有空头仓位且价格突破DEMA144
+            elif current_position == "short" and curr["close"] > curr["dema144"]:
+                signals_df.loc[signals_df.index[i], "buy_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = 0
+                signals_df.loc[signals_df.index[i], "trade_action"] = "平空止损"
+                current_position = None  # 平仓
+            else:
+                # 延续前一个状态
+                signals_df.loc[signals_df.index[i], "position"] = signals_df.loc[signals_df.index[i-1], "position"]
+        
+        # 计算多头止损位 (设置在DEMA169上)
+        signals_df["stop_loss_buy"] = signals_df["dema169"]
+        
+        # 计算空头止损位 (设置在DEMA144上)
+        signals_df["stop_loss_sell"] = signals_df["dema144"]
+                
+        return signals_df
+
+class SupertrendDEMAAdxStrategy(Strategy):
+    """基于Supertrend、DEMA和ADX的策略"""
+    
+    def generate_signals(self, df):
+        """
+        生成交易信号：
+        1. Supertrend出现买入信号
+        2. 价格突破DEMA144和DEMA169做多
+        3. ADX大于阈值(默认20)，表示趋势强度足够
+        4. 止损在DEMA169线上
+        5. 做空信号则相反，止损在DEMA144线上
+        
+        参数:
+            df (pd.DataFrame): 包含指标数据的DataFrame
+            
+        返回:
+            pd.DataFrame: 添加了信号的DataFrame
+        """
+        # 创建副本避免修改原始数据
+        signals_df = df.copy()
+            
+        # 初始化信号列
+        signals_df["buy_signal"] = False
+        signals_df["sell_signal"] = False
+        signals_df["position"] = 0  # 0表示无持仓，1表示多头，-1表示空头
+        signals_df["trade_action"] = None  # 记录交易动作
+        
+        # ADX阈值
+        adx_threshold = self.signals_config.get("adx_threshold", 20)
+        
+        # 获取当前状态
+        current_position = None
+        
+        # 遍历数据生成信号
+        for i in range(1, len(signals_df)):
+            # 读取当前行和前一行的数据
+            prev = signals_df.iloc[i-1]
+            curr = signals_df.iloc[i]
+            
+            # 检查ADX是否大于阈值(表示趋势强度足够)
+            adx_strong_trend = curr["adx"] > adx_threshold
+            
+            # 买入信号: 
+            # 1. Supertrend出现买入信号
+            # 2. 价格突破DEMA144和DEMA169
+            # 3. ADX大于阈值，表示趋势强度足够
+            buy_condition = (
+                # Supertrend买入信号
+                curr["supertrend_buy"] and
+                # 价格突破DEMA144和DEMA169
+                (curr["close"] > curr["dema144"]) and (curr["close"] > curr["dema169"]) and
+                # ADX大于阈值，表示趋势强度足够
+                adx_strong_trend
+            )
+            
+            # 卖出信号:
+            # 1. Supertrend出现卖出信号
+            # 2. 价格跌破DEMA144和DEMA169
+            # 3. ADX大于阈值，表示趋势强度足够
+            sell_condition = (
+                # Supertrend卖出信号
+                curr["supertrend_sell"] and
+                # 价格跌破DEMA144和DEMA169
+                (curr["close"] < curr["dema144"]) and (curr["close"] < curr["dema169"]) and
+                # ADX大于阈值，表示趋势强度足够
+                adx_strong_trend
+            )
+            
+            # 设置信号，考虑当前持仓状态
+            # 只有当没有持仓时才生成新的开仓信号
+            if buy_condition and current_position is None:
+                signals_df.loc[signals_df.index[i], "buy_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = 1
+                signals_df.loc[signals_df.index[i], "trade_action"] = "开多"
+                current_position = "long"
+            elif sell_condition and current_position is None:
+                signals_df.loc[signals_df.index[i], "sell_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = -1
+                signals_df.loc[signals_df.index[i], "trade_action"] = "开空"
+                current_position = "short"
+            
+            # 止损逻辑：如果持有多头仓位且价格跌破DEMA169
+            elif current_position == "long" and curr["close"] < curr["dema169"]:
+                signals_df.loc[signals_df.index[i], "sell_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = 0
+                signals_df.loc[signals_df.index[i], "trade_action"] = "平多止损"
+                current_position = None  # 平仓
+            # 止损逻辑：如果持有空头仓位且价格突破DEMA144
+            elif current_position == "short" and curr["close"] > curr["dema144"]:
+                signals_df.loc[signals_df.index[i], "buy_signal"] = True
+                signals_df.loc[signals_df.index[i], "position"] = 0
+                signals_df.loc[signals_df.index[i], "trade_action"] = "平空止损"
+                current_position = None  # 平仓
+            else:
+                # 延续前一个状态
+                signals_df.loc[signals_df.index[i], "position"] = signals_df.loc[signals_df.index[i-1], "position"]
+        
+        # 计算多头止损位 (设置在DEMA169上)
+        signals_df["stop_loss_buy"] = signals_df["dema169"]
+        
+        # 计算空头止损位 (设置在DEMA144上)
+        signals_df["stop_loss_sell"] = signals_df["dema144"]
+                
+        return signals_df
+
+
+class StrategyFactory:
+    """策略工厂，用于创建和管理策略"""
+    
+    @staticmethod
+    def get_strategy_list():
+        """
+        获取可用策略列表
+        
+        返回:
+            list: 策略列表
+        """
+        return ["Supertrend和DEMA策略", "SupertrendDEMAAdx策略"]
+    
+    @staticmethod
+    def create_strategy(strategy_name, config):
+        """
+        创建策略
+        
+        参数:
+            strategy_name (str): 策略名称
+            config (dict): 配置信息
+            
+        返回:
+            Strategy: 策略实例
+        """
+        if strategy_name == "Supertrend和DEMA策略":
+            return SupertrendDEMAStrategy(config)
+        elif strategy_name == "SupertrendDEMAAdx策略":
+            return SupertrendDEMAAdxStrategy(config)
+        else:
+            # 默认使用Supertrend和DEMA策略
+            print(f"未知策略 '{strategy_name}'，使用默认Supertrend和DEMA策略")
+            return SupertrendDEMAStrategy(config)
 
 class SignalGenerator:
-    """信号生成器类，负责生成交易信号"""
+    """信号生成器，负责根据指标生成交易信号"""
     
     def __init__(self, config):
         """
@@ -14,285 +303,61 @@ class SignalGenerator:
             config (dict): 配置信息
         """
         self.config = config
-        self.signal_config = config.get("signals", {})
+        self.signals_config = config.get("signals", {})
         
-        # 默认风险收益比
-        self.risk_reward_ratio = self.signal_config.get("risk_reward_ratio", 3.0)
-        
+        # 创建策略
+        strategy_name = self.signals_config.get("strategy", "Supertrend和DEMA策略")
+        print(f"SignalGenerator初始化使用策略: {strategy_name}")
+        self.strategy = StrategyFactory.create_strategy(strategy_name, config)
+    
     def generate_signals(self, df):
         """
         生成交易信号
         
         参数:
-            df (pd.DataFrame): 包含技术指标的数据
+            df (pd.DataFrame): 包含指标数据的DataFrame
             
         返回:
-            pd.DataFrame: 添加了交易信号的数据
+            pd.DataFrame: 添加了信号的DataFrame
         """
-        with st.spinner("正在生成交易信号..."):
-            # 创建副本避免修改原始数据
-            result_df = df.copy()
-            
-            # 初始化买卖信号列
-            result_df['buy_signal'] = False
-            result_df['sell_signal'] = False
-            
-            # 计算买入信号
-            for i in range(1, len(result_df)):
-                # 买入条件: 趋势转为上升且价格在均线上方
-                result_df.loc[result_df.index[i], 'buy_signal'] = (
-                    result_df['trend'].iloc[i] == 1 and 
-                    result_df['trend'].iloc[i-1] == -1 and
-                    result_df['close'].iloc[i] > result_df['dema_144'].iloc[i] and 
-                    result_df['close'].iloc[i] > result_df['dema_169'].iloc[i]
-                )
-                
-                # 卖出条件: 趋势转为下降且价格在均线下方
-                result_df.loc[result_df.index[i], 'sell_signal'] = (
-                    result_df['trend'].iloc[i] == -1 and 
-                    result_df['trend'].iloc[i-1] == 1 and
-                    result_df['close'].iloc[i] < result_df['dema_144'].iloc[i] and 
-                    result_df['close'].iloc[i] < result_df['dema_169'].iloc[i]
-                )
-            
-            st.success("交易信号生成完成")
-            return result_df
+        return self.strategy.generate_signals(df)
     
-    def calculate_risk_reward(self, df):
+    def calculate_risk_reward(self, signals_df):
         """
-        计算风险收益比和止损止盈价格
+        计算风险回报比
         
         参数:
-            df (pd.DataFrame): 包含交易信号的数据
+            signals_df (pd.DataFrame): 包含信号和止损的数据
             
         返回:
-            pd.DataFrame: 添加了风险收益计算的数据
+            pd.DataFrame: 添加了目标价格的数据
         """
-        with st.spinner("正在计算风险收益比..."):
-            # 创建副本避免修改原始数据
-            result_df = df.copy()
-            
-            # 初始化止损止盈列
-            result_df['stop_loss_buy'] = np.nan
-            result_df['take_profit_buy'] = np.nan
-            result_df['stop_loss_sell'] = np.nan
-            result_df['take_profit_sell'] = np.nan
-            
-            # 计算买入信号的止损止盈
-            buy_signals = result_df[result_df['buy_signal']]
-            for idx in buy_signals.index:
-                # 买入信号的止损设为DEMA169
-                result_df.loc[idx, 'stop_loss_buy'] = result_df.loc[idx, 'dema_169']
-                
-                # 计算买入风险
-                entry_price = result_df.loc[idx, 'close']
-                stop_loss = result_df.loc[idx, 'stop_loss_buy']
-                risk = entry_price - stop_loss
-                
-                # 计算止盈价格 (风险收益比)
-                take_profit = entry_price + (risk * self.risk_reward_ratio)
-                result_df.loc[idx, 'take_profit_buy'] = take_profit
-            
-            # 计算卖出信号的止损止盈
-            sell_signals = result_df[result_df['sell_signal']]
-            for idx in sell_signals.index:
-                # 卖出信号的止损设为DEMA144
-                result_df.loc[idx, 'stop_loss_sell'] = result_df.loc[idx, 'dema_144']
-                
-                # 计算卖出风险
-                entry_price = result_df.loc[idx, 'close']
-                stop_loss = result_df.loc[idx, 'stop_loss_sell']
-                risk = stop_loss - entry_price
-                
-                # 计算止盈价格 (风险收益比)
-                take_profit = entry_price - (risk * self.risk_reward_ratio)
-                result_df.loc[idx, 'take_profit_sell'] = take_profit
-                
-            st.success("风险收益比计算完成")
-            return result_df
-    
-    def summarize_signals(self, df):
-        """
-        统计交易信号
-        
-        参数:
-            df (pd.DataFrame): 包含交易信号的数据
-            
-        返回:
-            dict: 信号统计结果
-        """
-        # 提取买卖信号
-        buy_signals = df[df['buy_signal']]
-        sell_signals = df[df['sell_signal']]
-        
-        # 统计信号数量
-        total_signals = len(buy_signals) + len(sell_signals)
-        
-        # 创建汇总信息
-        summary = {
-            "总信号数": total_signals,
-            "买入信号数": len(buy_signals),
-            "卖出信号数": len(sell_signals),
-            "最新趋势": "上升" if df['trend'].iloc[-1] == 1 else "下降",
-            "买入信号": [],
-            "卖出信号": []
-        }
-        
-        # 获取最近的买入信号
-        recent_buy_signals = buy_signals.tail(5)
-        for idx, row in recent_buy_signals.iterrows():
-            signal_info = {
-                "时间": idx.strftime('%Y-%m-%d %H:%M:%S'),
-                "价格": row['close'],
-                "止损": row['stop_loss_buy'],
-                "止盈": row['take_profit_buy'],
-                "风险比": f"1:{self.risk_reward_ratio:.1f}"
-            }
-            summary["买入信号"].append(signal_info)
-        
-        # 获取最近的卖出信号
-        recent_sell_signals = sell_signals.tail(5)
-        for idx, row in recent_sell_signals.iterrows():
-            signal_info = {
-                "时间": idx.strftime('%Y-%m-%d %H:%M:%S'),
-                "价格": row['close'],
-                "止损": row['stop_loss_sell'],
-                "止盈": row['take_profit_sell'],
-                "风险比": f"1:{self.risk_reward_ratio:.1f}"
-            }
-            summary["卖出信号"].append(signal_info)
-        
-        return summary
+        return self.strategy.calculate_risk_reward(signals_df)
 
-def render_signal_ui(config, indicators_df=None):
+def analyze_signals(signals_df):
     """
-    渲染信号分析UI界面
+    分析交易信号
     
     参数:
-        config (dict): 配置信息
-        indicators_df (pd.DataFrame): 包含指标的数据
+        signals_df (pd.DataFrame): 包含信号的数据
         
     返回:
-        pd.DataFrame: 带有信号的DataFrame
+        dict: 分析结果
     """
-    st.header("信号分析")
+    # 买入信号数量
+    buy_signals = signals_df["buy_signal"].sum()
     
-    if indicators_df is None:
-        if 'indicators_df' in st.session_state:
-            indicators_df = st.session_state.indicators_df
-        else:
-            st.warning("请先计算技术指标")
-            return None
+    # 卖出信号数量
+    sell_signals = signals_df["sell_signal"].sum()
     
-    # 创建信号生成器
-    signal_generator = SignalGenerator(config)
+    # 总信号数量
+    total_signals = buy_signals + sell_signals
     
-    # 显示当前配置
-    signal_config = config.get("signals", {})
-    st.info(f"风险收益比: 1:{signal_config.get('risk_reward_ratio', 3.0)}")
+    # 信号分布
+    signal_distribution = {
+        "买入信号": int(buy_signals),
+        "卖出信号": int(sell_signals),
+        "总信号数": int(total_signals)
+    }
     
-    # 生成信号按钮
-    if st.button("生成交易信号"):
-        # 生成信号
-        signals_df = signal_generator.generate_signals(indicators_df)
-        
-        # 计算风险收益比
-        signals_df = signal_generator.calculate_risk_reward(signals_df)
-        
-        # 保存到session_state
-        st.session_state.signals_df = signals_df
-        
-        # 统计信号
-        signal_summary = signal_generator.summarize_signals(signals_df)
-        
-        # 显示信号汇总
-        st.subheader("信号统计")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("总信号数", signal_summary["总信号数"])
-        col2.metric("买入信号", signal_summary["买入信号数"])
-        col3.metric("卖出信号", signal_summary["卖出信号数"])
-        
-        # 显示最新趋势
-        st.info(f"当前趋势: {signal_summary['最新趋势']}")
-        
-        # 显示信号表格
-        if signal_summary["买入信号"]:
-            st.subheader("最近买入信号")
-            buy_df = pd.DataFrame(signal_summary["买入信号"])
-            st.dataframe(buy_df)
-        
-        if signal_summary["卖出信号"]:
-            st.subheader("最近卖出信号")
-            sell_df = pd.DataFrame(signal_summary["卖出信号"])
-            st.dataframe(sell_df)
-        
-        return signals_df
-    
-    # 如果已经生成过信号
-    if 'signals_df' in st.session_state:
-        signals_df = st.session_state.signals_df
-        st.success(f"已加载信号数据 ({len(signals_df)} 条记录)")
-        
-        # 显示信号统计按钮
-        if st.button("显示信号统计"):
-            # 统计信号
-            signal_summary = signal_generator.summarize_signals(signals_df)
-            
-            # 显示信号汇总
-            st.subheader("信号统计")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("总信号数", signal_summary["总信号数"])
-            col2.metric("买入信号", signal_summary["买入信号数"])
-            col3.metric("卖出信号", signal_summary["卖出信号数"])
-            
-            # 显示最新趋势
-            st.info(f"当前趋势: {signal_summary['最新趋势']}")
-            
-            # 显示信号表格
-            if signal_summary["买入信号"]:
-                st.subheader("最近买入信号")
-                buy_df = pd.DataFrame(signal_summary["买入信号"])
-                st.dataframe(buy_df)
-            
-            if signal_summary["卖出信号"]:
-                st.subheader("最近卖出信号")
-                sell_df = pd.DataFrame(signal_summary["卖出信号"])
-                st.dataframe(sell_df)
-        
-        return signals_df
-    
-    return None
-
-if __name__ == "__main__":
-    # 测试信号分析UI
-    import yaml
-    
-    st.set_page_config(page_title="阿翔趋势交易系统 - 信号分析", layout="wide")
-    
-    # 加载配置
-    with open("config.yaml", 'r', encoding='utf-8') as file:
-        config = yaml.safe_load(file)
-    
-    # 创建测试数据
-    if 'indicators_df' not in st.session_state:
-        # 创建模拟数据
-        date_range = pd.date_range(start='2023-01-01', periods=200, freq='H')
-        data = {
-            'open': np.random.normal(10000, 500, len(date_range)),
-            'high': np.random.normal(10100, 500, len(date_range)),
-            'low': np.random.normal(9900, 500, len(date_range)),
-            'close': np.random.normal(10050, 500, len(date_range)),
-            'volume': np.random.normal(100, 20, len(date_range))
-        }
-        df = pd.DataFrame(data, index=date_range)
-        
-        # 计算指标
-        try:
-            indicator_calculator = IndicatorCalculator(config)
-            indicators_df = indicator_calculator.calculate_all_indicators(df)
-            st.session_state.indicators_df = indicators_df
-        except Exception as e:
-            st.error(f"计算指标错误: {e}")
-            indicators_df = None
-    
-    render_signal_ui(config)
+    return signal_distribution

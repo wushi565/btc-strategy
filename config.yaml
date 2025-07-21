@@ -1,20 +1,26 @@
-capital:
-  initial_capital: 10000.0
-  leverage: 3.0
-  risk_per_trade: 1.0
+trading:
+  symbol: "BTC/USDT"
+  timeframe: "1h"
+  is_futures: true
+
+network:
+  enable_proxy: false  # 设置为true启用代理，false则使用系统代理
+  http_proxy: "socks5://127.0.0.1:7890" 
+  https_proxy: "socks5://127.0.0.1:7890"
+
 indicators:
-  atr_multiplier: 3.0
-  atr_period: 34
   dema144_len: 144
   dema169_len: 169
-  ema120_len: 120
-  ema200_len: 200
-network:
-  http_proxy: http://127.0.0.1:7897
-  https_proxy: http://127.0.0.1:7897
-trading:
-  is_futures: true
-  symbol: BTC/USDT:USDT
-  timeframe: 1h
-data:
-  cache_dir: data
+  atr_period: 34
+  atr_multiplier: 3.0
+  adx_period: 14
+  adx_threshold: 20
+
+signals:
+  risk_reward_ratio: 3.0
+  strategy: "Supertrend和DEMA策略"
+
+backtest:
+  initial_capital: 10000.0
+  leverage: 1.0
+  risk_per_trade: 0.02

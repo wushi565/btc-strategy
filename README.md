@@ -1,67 +1,114 @@
-# 阿翔趋势交易系统2.1 (Axiang Trend Trading System 2.1)
+# 比特币 Supertrend 和 DEMA 策略
 
-基于多均线和ATR的趋势交易系统，用Python实现。
+这是一个简化版的比特币交易策略系统，专注于使用 Supertrend 指标和 DEMA (双指数移动平均线) 生成交易信号。
 
 ## 功能特点
 
-- 使用DEMA144、DEMA169、EMA120和EMA200多均线系统
-- 基于ATR的趋势识别
-- 买入条件：趋势转为正向且价格突破DEMA144和DEMA169
-- 卖出条件：趋势转为负向且价格跌破DEMA144和DEMA169
-- 买入止损设置在DEMA169
-- 卖出止损设置在DEMA144
-- 风险收益比设为3:1
-- 使用CCXT库获取币安交易所数据
-- 支持时间转换为北京时间
+- **数据获取**：从币安获取 BTC/USDT 历史价格数据，支持不同时间周期
+- **本地缓存**：自动缓存历史数据，避免重复下载
+- **技术指标**：计算 Supertrend 和 DEMA 指标
+- **信号生成**：基于指标生成买入/卖出信号
+- **可视化**：图形化展示价格、指标和信号
 
-## 安装依赖
+## 策略说明
 
-```
-pip install ccxt pandas numpy matplotlib pytz
-```
+**Supertrend和DEMA策略**：
+1. **买入条件**：
+   - Supertrend 由空转多 (趋势反转)
+   - 价格突破 DEMA144 和 DEMA169
+   
+2. **卖出条件**：
+   - Supertrend 由多转空 (趋势反转)
+   - 价格跌破 DEMA144 和 DEMA169
+
+3. **止损设置**：
+   - 多头止损设在 DEMA169 下方
+   - 空头止损设在 DEMA144 上方
+
+## 安装
+
+1. 克隆仓库：
+   ```
+   git clone <仓库地址>
+   cd <项目目录>
+   ```
+
+2. 安装依赖：
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. 配置代理（如需）：
+   编辑 `config.yaml` 文件中的 `network` 部分
 
 ## 使用方法
 
-```python
-from axiang_trend_system import AxiangTrendSystem
+1. 运行主程序：
+   ```
+   python main.py
+   ```
 
-# 创建交易系统实例
-trading_system = AxiangTrendSystem(
-    symbol='BTC/USDT',  # 交易对
-    timeframe='1h',     # 时间周期
-    dema144_len=144,    # DEMA144均线长度
-    dema169_len=169,    # DEMA169均线长度
-    ema120_len=120,     # EMA120均线长度
-    ema200_len=200,     # EMA200均线长度
-    atr_period=34,      # ATR周期
-    atr_multiplier=3.0  # ATR倍数
-)
+2. 按照提示选择：
+   - 使用本地数据文件
+   - 或按日期范围获取新数据
 
-# 获取数据并计算指标
-df = trading_system.run_strategy()
+3. 系统会自动：
+   - 获取/加载数据
+   - 计算技术指标
+   - 生成交易信号
+   - 显示可视化图表
 
-# 分析交易信号
-trading_system.analyze_signals(df)
+## 配置文件
 
-# 绘制策略图表
-trading_system.plot_strategy(df)
-```
+通过编辑 `config.yaml` 可以自定义以下参数：
 
-## 参数说明
+- **trading**: 交易对、时间周期等
+- **network**: 网络代理设置
+- **indicators**: 技术指标参数
+  - `dema144_len`: DEMA144 周期 (默认 144)
+  - `dema169_len`: DEMA169 周期 (默认 169)
+  - `atr_period`: ATR 周期 (默认 34)
+  - `atr_multiplier`: Supertrend 乘数 (默认 3.0)
+- **signals**: 信号生成参数
+  - `risk_reward_ratio`: 风险回报比 (默认 3.0)
 
-- `symbol`: 交易对，如 'BTC/USDT'
-- `timeframe`: 时间周期，如 '1h', '4h', '1d'
-- `dema144_len`: DEMA144均线周期
-- `dema169_len`: DEMA169均线周期
-- `ema120_len`: EMA120均线周期
-- `ema200_len`: EMA200均线周期
-- `atr_period`: ATR计算周期
-- `atr_multiplier`: ATR倍数
+## 文件结构
 
-## 策略逻辑
+- `main.py`: 主程序入口
+- `data.py`: 数据获取和管理
+- `indicators.py`: 技术指标计算
+- `signals.py`: 交易信号生成
+- `config.yaml`: 配置文件
+- `data/`: 数据缓存目录
 
-1. 使用ATR指标识别价格趋势
-2. 当趋势由负转正且价格突破DEMA144和DEMA169时产生买入信号
-3. 当趋势由正转负且价格跌破DEMA144和DEMA169时产生卖出信号
-4. 买入止损设置在DEMA169，止盈为止损的3倍
-5. 卖出止损设置在DEMA144，止盈为止损的3倍 
+## 注意事项
+
+- 此系统仅用于教育和研究目的，不构成投资建议
+- 使用前请确保您的网络能够访问币安 API
+- 如需使用代理，请在 `config.yaml` 中正确配置 
+
+
+
+我已经对交易系统进行了重要升级，添加了止盈止损自动平仓的功能。以下是主要改进：
+添加止盈自动平仓：
+当价格达到目标价格（止盈位）时，系统会自动平仓
+多头持仓检查当前K线的最高价是否触及止盈价
+空头持仓检查当前K线的最低价是否触及止盈价
+平仓时使用目标价格作为成交价格，计算实际盈利
+添加止损自动平仓：
+当价格触及止损价格时，系统会自动平仓
+多头持仓检查当前K线的最低价是否跌破止损价
+空头持仓检查当前K线的最高价是否突破止损价
+平仓时使用止损价格作为成交价格，计算实际损失
+增加交易动作记录：
+添加了trade_action列记录每次交易的类型
+明确标识平仓原因：止盈平仓、止损平仓或信号平仓
+记录开仓行为：开多、开空
+防止重复交易：
+添加逻辑确保同一K线内触发止盈/止损后不会再根据信号开仓
+使用条件判断跳过已经平仓的K线的信号检查
+这些改进解决了您提出的问题：
+止盈达到目标价格时会自动平仓，不再需要等待反向信号
+价格触及止损位置时会自动平仓，保护资金安全
+现在您可以再次运行策略，回测结果将更加准确地反映止盈止损的效果，风险回报比设置为3（即止盈位置为止损距离的3倍）。系统会自动记录平仓原因，您可以在Excel报表中查看详细的交易记录。
+这些修改不会影响警告信息，它们是良性的与图表相关的警告，由于您已经禁用
