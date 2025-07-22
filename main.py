@@ -437,9 +437,10 @@ def main():
     print("\n选择功能:")
     print("1. 回测策略 (优化版本)")
     print("2. 性能对比测试")
-    print("3. 杠杆优化")
+    print("3. 基本杠杆优化")
+    print("4. 动态杠杆优化 (自适应搜索)")
     
-    function_choice = input("请选择功能 (1-3): ")
+    function_choice = input("请选择功能 (1-4): ")
     
     if function_choice == "1":
         # 回测策略
@@ -494,8 +495,8 @@ def main():
         performance_comparison()
     
     elif function_choice == "3":
-        # 杠杆优化
-        print("\n===== 杠杆优化 =====")
+        # 基本杠杆优化
+        print("\n===== 基本杠杆优化 =====")
         try:
             from leverage_optimizer import main as run_leverage_optimizer
             run_leverage_optimizer()
@@ -503,6 +504,17 @@ def main():
             print("杠杆优化模块未找到")
         except Exception as e:
             print(f"运行杠杆优化时出错: {e}")
+    
+    elif function_choice == "4":
+        # 动态杠杆优化
+        print("\n===== 动态杠杆优化 =====")
+        try:
+            from dynamic_leverage_optimizer import main as run_dynamic_optimizer
+            run_dynamic_optimizer()
+        except ImportError:
+            print("动态杠杆优化模块未找到")
+        except Exception as e:
+            print(f"运行动态杠杆优化时出错: {e}")
     
     else:
         print("无效的选择!")
