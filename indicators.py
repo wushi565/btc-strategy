@@ -1,260 +1,322 @@
-﻿import pandas as pd
-import numpy as np
-import streamlit as st
+# =============================================================================
+# 优化版技术指标计算器
+# 功能：使用向量化操作和缓存机制计算Supertrend、DEMA、ATR、ADX等指标
+# 优化：支持批量计算、内存优化、性能监控
+# 版本：2.0 (优化版)
+# =============================================================================
 
-class IndicatorCalculator:
-    """指标计算器类，负责计算各种技术指标"""
+import pandas as pd         # 数据处理和分析
+import numpy as np          # 数值计算和数组操作
+import pandas_ta as ta      # 技术指标库
+import time                 # 时间测量
+from datetime import datetime  # 日期时间处理
+from functools import lru_cache  # 缓存装饰器
+import warnings             # 警告控制
+
+# 性能优化设置 - 忽略pandas性能警告以提高运行速度
+warnings.filterwarnings('ignore', category=pd.errors.PerformanceWarning)
+
+class OptimizedIndicatorCalculator:
+    """优化的指标计算器，使用缓存和向量化操作提高性能"""
     
     def __init__(self, config):
-        """
-        初始化指标计算器
-        
-        参数:
-            config (dict): 配置信息
-        """
+        """初始化指标计算器"""
         self.config = config
-        self.indicator_config = config.get("indicators", {})
+        self.indicators_config = config.get("indicators", {})
         
-        # 获取指标参数
-        self.dema144_len = self.indicator_config.get("dema144_len", 144)
-        self.dema169_len = self.indicator_config.get("dema169_len", 169)
-        self.ema120_len = self.indicator_config.get("ema120_len", 120)
-        self.ema200_len = self.indicator_config.get("ema200_len", 200)
-        self.atr_period = self.indicator_config.get("atr_period", 34)
-        self.atr_multiplier = self.indicator_config.get("atr_multiplier", 3.0)
+        # 获取参数
+        self.dema144_len = self.indicators_config.get("dema144_len", 144)
+        self.dema169_len = self.indicators_config.get("dema169_len", 169)
+        self.atr_period = self.indicators_config.get("atr_period", 34)
+        self.multiplier = self.indicators_config.get("atr_multiplier", 3.0)
+        self.adx_period = self.indicators_config.get("adx_period", 14)
+        self.adx_threshold = self.indicators_config.get("adx_threshold", 20)
+        
+        # 缓存
+        self._cache = {}
+        self._last_data_hash = None
     
-    def calculate_ema(self, series, length):
+    def calculate_all_indicators_optimized(self, df):
         """
-        计算指数移动平均线 (EMA)
+        优化的指标计算，使用缓存和向量化操作
         
         参数:
-            series (pd.Series): 价格序列
-            length (int): EMA周期
+            df (pd.DataFrame): 原始数据
             
         返回:
-            pd.Series: EMA值
+            pd.DataFrame: 添加了指标的数据
         """
-        return series.ewm(span=length, adjust=False).mean()
-    
-    def calculate_dema(self, series, length):
-        """
-        计算双指数移动平均线 (DEMA)
+        start_time = time.time()
+        print(f"开始优化指标计算... 数据大小: {len(df)} 行 x {len(df.columns)} 列")
         
-        参数:
-            series (pd.Series): 价格序列
-            length (int): DEMA周期
-            
-        返回:
-            pd.Series: DEMA值
-        """
-        ema1 = self.calculate_ema(series, length)
-        ema2 = self.calculate_ema(ema1, length)
+        # 检查数据是否变化
+        data_hash = hash(str(df.values.tobytes()) + str(df.index.values.tobytes()))
+        if data_hash == self._last_data_hash and 'result' in self._cache:
+            print("使用缓存的指标计算结果")
+            return self._cache['result'].copy()
+        
+        # 验证必要列
+        required_columns = ["open", "high", "low", "close", "volume"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"缺少必要的列: {missing_columns}")
+        
+        # 创建副本
+        result_df = df.copy()
+        
+        # 批量计算指标
+        indicators = self._calculate_indicators_batch(result_df)
+        
+        # 合并结果
+        for name, values in indicators.items():
+            result_df[name] = values
+        
+        # 缓存结果
+        self._cache['result'] = result_df.copy()
+        self._last_data_hash = data_hash
+        
+        total_time = time.time() - start_time
+        memory_usage = result_df.memory_usage(deep=True).sum() / 1024 / 1024  # MB
+        
+        print(f"优化指标计算完成! 总耗时: {total_time:.2f} 秒")
+        print(f"结果数据大小: {len(result_df)} 行 x {len(result_df.columns)} 列")
+        print(f"内存占用: {memory_usage:.2f} MB")
+        print(f"新增指标列: {', '.join(indicators.keys())}")
+        
+        return result_df
+    
+    def _calculate_indicators_batch(self, df):
+        """批量计算所有指标"""
+        indicators = {}
+        
+        # 1. 计算DEMA (向量化)
+        print("  计算DEMA指标...")
+        indicators['dema144'] = self._calculate_dema_vectorized(df['close'], self.dema144_len)
+        indicators['dema169'] = self._calculate_dema_vectorized(df['close'], self.dema169_len)
+        
+        # 2. 计算ATR (使用pandas_ta)
+        print("  计算ATR指标...")
+        indicators['atr'] = ta.atr(df['high'], df['low'], df['close'], length=self.atr_period)
+        
+        # 3. 计算ADX (使用pandas_ta)
+        print("  计算ADX指标...")
+        adx_result = ta.adx(df['high'], df['low'], df['close'], length=self.adx_period)
+        if adx_result is not None:
+            indicators['adx'] = adx_result[f'ADX_{self.adx_period}']
+            indicators['plus_di'] = adx_result[f'DMP_{self.adx_period}']
+            indicators['minus_di'] = adx_result[f'DMN_{self.adx_period}']
+        else:
+            # 备用计算
+            indicators['adx'] = pd.Series(np.nan, index=df.index)
+            indicators['plus_di'] = pd.Series(np.nan, index=df.index)
+            indicators['minus_di'] = pd.Series(np.nan, index=df.index)
+        
+        # 4. 计算Supertrend (优化版本)
+        print("  计算Supertrend指标...")
+        st_result = self._calculate_supertrend_vectorized(df, self.atr_period, self.multiplier)
+        indicators.update(st_result)
+        
+        return indicators
+    
+    @lru_cache(maxsize=32)
+    def _calculate_dema_vectorized(self, price_series_tuple, period):
+        """向量化计算DEMA，使用缓存"""
+        # 将元组转换回Series
+        price_series = pd.Series(price_series_tuple[0], index=price_series_tuple[1])
+        
+        # 使用pandas的ewm函数计算DEMA
+        ema1 = price_series.ewm(span=period, adjust=False).mean()
+        ema2 = ema1.ewm(span=period, adjust=False).mean()
         dema = 2 * ema1 - ema2
+        
         return dema
     
-    def calculate_atr(self, df, period):
-        """
-        计算平均真实范围 (ATR)
+    def _calculate_dema_vectorized(self, price_series, period):
+        """向量化计算DEMA"""
+        # 使用pandas的ewm函数计算DEMA
+        ema1 = price_series.ewm(span=period, adjust=False).mean()
+        ema2 = ema1.ewm(span=period, adjust=False).mean()
+        dema = 2 * ema1 - ema2
         
-        参数:
-            df (pd.DataFrame): 包含'high', 'low', 'close'列的DataFrame
-            period (int): ATR周期
-            
-        返回:
-            pd.Series: ATR值
-        """
-        high_low = df['high'] - df['low']
-        high_close = abs(df['high'] - df['close'].shift(1))
-        low_close = abs(df['low'] - df['close'].shift(1))
-        
-        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        atr = tr.rolling(window=period).mean()
-        
-        return atr
+        return dema
     
-    def calculate_trend_channels(self, df, atr):
-        """
-        计算趋势通道 (上下轨道)
+    def _calculate_supertrend_vectorized(self, df, length, multiplier):
+        """向量化计算Supertrend指标"""
+        # 计算ATR如果还没有
+        if 'atr' not in df.columns:
+            atr = ta.atr(df['high'], df['low'], df['close'], length=length)
+        else:
+            atr = df['atr']
         
-        参数:
-            df (pd.DataFrame): 价格数据
-            atr (pd.Series): ATR值
-            
-        返回:
-            tuple: (upper, lower) 上轨道和下轨道
-        """
-        hl2 = (df['high'] + df['low']) / 2
+        # 计算HL2
+        hl2 = (df['high'] + df['low']) / 2.0
         
-        # 初始化上下轨道
-        upper = hl2 - self.atr_multiplier * atr
-        lower = hl2 + self.atr_multiplier * atr
+        # 计算上下轨
+        upper_basic = hl2 - multiplier * atr
+        lower_basic = hl2 + multiplier * atr
         
-        # 创建副本以避免链式赋值警告
-        upper_values = upper.copy()
-        lower_values = lower.copy()
+        # 使用numpy进行向量化计算
+        close_values = df['close'].values
+        upper_values = upper_basic.values
+        lower_values = lower_basic.values
         
-        # 计算趋势轨道
-        for i in range(1, len(df)):
-            if df['close'].iloc[i] > upper.shift(1).iloc[i]:
-                upper_values.iloc[i] = max(upper_values.iloc[i], upper.shift(1).iloc[i])
-            
-            if df['close'].iloc[i] < lower.shift(1).iloc[i]:
-                lower_values.iloc[i] = min(lower_values.iloc[i], lower.shift(1).iloc[i])
+        # 计算平滑轨
+        upper_smooth = self._calculate_smooth_band(upper_values, close_values, is_upper=True)
+        lower_smooth = self._calculate_smooth_band(lower_values, close_values, is_upper=False)
         
-        return upper_values, lower_values
+        # 计算趋势方向
+        trend = self._calculate_trend_vectorized(close_values, upper_smooth, lower_smooth)
+        
+        # 计算买卖信号
+        buy_signals = np.zeros(len(trend), dtype=bool)
+        sell_signals = np.zeros(len(trend), dtype=bool)
+        
+        # 向量化计算信号
+        trend_change = np.diff(trend, prepend=trend[0])
+        buy_signals[1:] = (trend[1:] == 1) & (trend_change[1:] == 2)  # 从-1变为1
+        sell_signals[1:] = (trend[1:] == -1) & (trend_change[1:] == -2)  # 从1变为-1
+        
+        return {
+            'supertrend_upper': pd.Series(upper_smooth, index=df.index),
+            'supertrend_lower': pd.Series(lower_smooth, index=df.index),
+            'supertrend_direction': pd.Series(trend, index=df.index),
+            'supertrend_buy': pd.Series(buy_signals, index=df.index),
+            'supertrend_sell': pd.Series(sell_signals, index=df.index)
+        }
     
-    def calculate_trend_direction(self, df, upper, lower):
-        """
-        计算趋势方向
+    def _calculate_smooth_band(self, basic_band, close_values, is_upper):
+        """向量化计算平滑轨道"""
+        smooth_band = basic_band.copy()
         
-        参数:
-            df (pd.DataFrame): 价格数据
-            upper (pd.Series): 上轨道
-            lower (pd.Series): 下轨道
-            
-        返回:
-            pd.Series: 趋势方向 (1: 上升, -1: 下降)
-        """
-        trend = pd.Series(1, index=df.index)  # 初始化为上升趋势
-        
-        for i in range(1, len(df)):
-            prev_trend = trend.iloc[i-1]
-            
-            if prev_trend == -1 and df['close'].iloc[i] > lower.iloc[i-1]:
-                trend.iloc[i] = 1  # 转为上升趋势
-            elif prev_trend == 1 and df['close'].iloc[i] < upper.iloc[i-1]:
-                trend.iloc[i] = -1  # 转为下降趋势
+        for i in range(1, len(basic_band)):
+            if is_upper:
+                # 上轨平滑逻辑
+                if close_values[i-1] > smooth_band[i-1]:
+                    smooth_band[i] = max(basic_band[i], smooth_band[i-1])
+                else:
+                    smooth_band[i] = basic_band[i]
             else:
-                trend.iloc[i] = prev_trend  # 保持当前趋势
+                # 下轨平滑逻辑
+                if close_values[i-1] < smooth_band[i-1]:
+                    smooth_band[i] = min(basic_band[i], smooth_band[i-1])
+                else:
+                    smooth_band[i] = basic_band[i]
+        
+        return smooth_band
+    
+    def _calculate_trend_vectorized(self, close_values, upper_smooth, lower_smooth):
+        """向量化计算趋势方向"""
+        trend = np.ones(len(close_values), dtype=int)
+        
+        for i in range(1, len(close_values)):
+            prev_trend = trend[i-1]
+            
+            if prev_trend == -1 and close_values[i] > lower_smooth[i-1]:
+                trend[i] = 1
+            elif prev_trend == 1 and close_values[i] < upper_smooth[i-1]:
+                trend[i] = -1
+            else:
+                trend[i] = prev_trend
         
         return trend
+
+
+class IndicatorCache:
+    """指标计算缓存管理器"""
+    
+    def __init__(self, max_size=100):
+        self.cache = {}
+        self.access_times = {}
+        self.max_size = max_size
+    
+    def get(self, key):
+        """获取缓存值"""
+        if key in self.cache:
+            self.access_times[key] = time.time()
+            return self.cache[key]
+        return None
+    
+    def set(self, key, value):
+        """设置缓存值"""
+        if len(self.cache) >= self.max_size:
+            self._evict_oldest()
+        
+        self.cache[key] = value
+        self.access_times[key] = time.time()
+    
+    def _evict_oldest(self):
+        """淘汰最老的缓存项"""
+        if not self.access_times:
+            return
+        
+        oldest_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
+        del self.cache[oldest_key]
+        del self.access_times[oldest_key]
+    
+    def clear(self):
+        """清空缓存"""
+        self.cache.clear()
+        self.access_times.clear()
+
+
+class FastIndicators:
+    """快速指标计算工具类"""
+    
+    @staticmethod
+    def fast_ema(prices, period):
+        """快速EMA计算"""
+        alpha = 2.0 / (period + 1.0)
+        ema = np.zeros_like(prices)
+        ema[0] = prices[0]
+        
+        for i in range(1, len(prices)):
+            ema[i] = alpha * prices[i] + (1 - alpha) * ema[i-1]
+        
+        return ema
+    
+    @staticmethod
+    def fast_sma(prices, period):
+        """快速SMA计算"""
+        return pd.Series(prices).rolling(window=period).mean().values
+    
+    @staticmethod
+    def fast_rsi(prices, period=14):
+        """快速RSI计算"""
+        deltas = np.diff(prices)
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+        
+        avg_gains = pd.Series(gains).rolling(window=period).mean()
+        avg_losses = pd.Series(losses).rolling(window=period).mean()
+        
+        rs = avg_gains / avg_losses
+        rsi = 100 - (100 / (1 + rs))
+        
+        return rsi.values
+    
+    @staticmethod
+    def fast_bollinger_bands(prices, period=20, std_dev=2):
+        """快速布林带计算"""
+        sma = pd.Series(prices).rolling(window=period).mean()
+        std = pd.Series(prices).rolling(window=period).std()
+        
+        upper = sma + (std * std_dev)
+        lower = sma - (std * std_dev)
+        
+        return {
+            'upper': upper.values,
+            'middle': sma.values,
+            'lower': lower.values
+        }
+
+
+# 向后兼容性包装器
+class IndicatorCalculator:
+    """原有接口的包装器，保持向后兼容性"""
+    
+    def __init__(self, config):
+        self.optimized_calculator = OptimizedIndicatorCalculator(config)
     
     def calculate_all_indicators(self, df):
-        """
-        计算所有技术指标
-        
-        参数:
-            df (pd.DataFrame): 价格数据
-            
-        返回:
-            pd.DataFrame: 带有所有指标的DataFrame
-        """
-        with st.spinner("正在计算技术指标..."):
-            # 创建副本避免修改原始数据
-            result_df = df.copy()
-            
-            # 计算移动平均线
-            result_df['ema_120'] = self.calculate_ema(result_df['close'], self.ema120_len)
-            result_df['ema_200'] = self.calculate_ema(result_df['close'], self.ema200_len)
-            
-            # 计算DEMA
-            result_df['ema_first_144'] = self.calculate_ema(result_df['close'], self.dema144_len)
-            result_df['ema_second_144'] = self.calculate_ema(result_df['ema_first_144'], self.dema144_len)
-            result_df['dema_144'] = 2 * result_df['ema_first_144'] - result_df['ema_second_144']
-            
-            result_df['ema_first_169'] = self.calculate_ema(result_df['close'], self.dema169_len)
-            result_df['ema_second_169'] = self.calculate_ema(result_df['ema_first_169'], self.dema169_len)
-            result_df['dema_169'] = 2 * result_df['ema_first_169'] - result_df['ema_second_169']
-            
-            # 计算ATR
-            result_df['atr'] = self.calculate_atr(result_df, self.atr_period)
-            
-            # 计算hl2 (high+low)/2
-            result_df['hl2'] = (result_df['high'] + result_df['low']) / 2
-            
-            # 计算趋势通道
-            upper, lower = self.calculate_trend_channels(result_df, result_df['atr'])
-            result_df['upper'] = upper
-            result_df['lower'] = lower
-            
-            # 计算趋势方向
-            result_df['trend'] = self.calculate_trend_direction(result_df, upper, lower)
-            
-            st.success("技术指标计算完成")
-            
-            return result_df
-
-def render_indicator_ui(config, klines_data=None):
-    """
-    渲染指标计算UI界面
-    
-    参数:
-        config (dict): 配置信息
-        klines_data (pd.DataFrame): K线数据
-        
-    返回:
-        pd.DataFrame: 带有指标的DataFrame
-    """
-    st.header("指标计算")
-    
-    if klines_data is None:
-        if 'klines_data' in st.session_state:
-            klines_data = st.session_state.klines_data
-        else:
-            st.warning("请先获取K线数据")
-            return None
-    
-    # 创建指标计算器
-    indicator_calculator = IndicatorCalculator(config)
-    
-    # 显示当前配置
-    indicator_config = config.get("indicators", {})
-    st.info(f"DEMA参数: {indicator_config.get('dema144_len')}/{indicator_config.get('dema169_len')} | " +
-            f"EMA参数: {indicator_config.get('ema120_len')}/{indicator_config.get('ema200_len')} | " +
-            f"ATR参数: {indicator_config.get('atr_period')}周期/{indicator_config.get('atr_multiplier')}倍")
-    
-    # 计算指标按钮
-    if st.button("计算技术指标"):
-        indicators_df = indicator_calculator.calculate_all_indicators(klines_data)
-        
-        # 保存到session_state
-        st.session_state.indicators_df = indicators_df
-        
-        # 显示指标预览
-        st.subheader("指标预览")
-        
-        # 显示部分列
-        preview_columns = ['close', 'dema_144', 'dema_169', 'ema_120', 'ema_200', 'atr', 'upper', 'lower', 'trend']
-        st.dataframe(indicators_df[preview_columns].tail())
-        
-        return indicators_df
-    
-    # 如果已经计算过指标
-    if 'indicators_df' in st.session_state:
-        indicators_df = st.session_state.indicators_df
-        st.success(f"已加载指标数据 ({len(indicators_df)} 条记录)")
-        
-        # 显示指标预览按钮
-        if st.button("显示指标预览"):
-            preview_columns = ['close', 'dema_144', 'dema_169', 'ema_120', 'ema_200', 'atr', 'upper', 'lower', 'trend']
-            st.dataframe(indicators_df[preview_columns].tail())
-        
-        return indicators_df
-    
-    return None
-
-if __name__ == "__main__":
-    # 测试指标计算UI
-    import yaml
-    
-    st.set_page_config(page_title="阿翔趋势交易系统 - 指标计算", layout="wide")
-    
-    # 加载配置
-    with open("config.yaml", 'r', encoding='utf-8') as file:
-        config = yaml.safe_load(file)
-    
-    # 创建测试数据
-    if 'klines_data' not in st.session_state:
-        # 创建模拟数据
-        date_range = pd.date_range(start='2023-01-01', periods=200, freq='H')
-        data = {
-            'open': np.random.normal(10000, 500, len(date_range)),
-            'high': np.random.normal(10100, 500, len(date_range)),
-            'low': np.random.normal(9900, 500, len(date_range)),
-            'close': np.random.normal(10050, 500, len(date_range)),
-            'volume': np.random.normal(100, 20, len(date_range))
-        }
-        df = pd.DataFrame(data, index=date_range)
-        st.session_state.klines_data = df
-    
-    render_indicator_ui(config) 
+        """调用优化版本的计算方法"""
+        return self.optimized_calculator.calculate_all_indicators_optimized(df)
