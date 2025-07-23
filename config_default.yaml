@@ -1,0 +1,75 @@
+# =============================================================================
+# 比特币交易策略回测系统 - 默认配置文件
+# 包含所有系统参数的默认值
+# =============================================================================
+
+# 交易设置
+trading:
+  symbol: "BTC/USDT"
+  timeframe: "1h"
+  is_futures: true
+
+# 网络设置
+network:
+  enable_proxy: false
+  http_proxy: "http://127.0.0.1:7890"
+  https_proxy: "http://127.0.0.1:7890"
+
+# 数据设置
+data:
+  cache_dir: "data"
+  enable_local_cache: true
+
+# 指标设置
+indicators:
+  dema144_len: 144
+  dema169_len: 169
+  atr_period: 34
+  atr_multiplier: 3.0
+  adx_period: 14
+  adx_threshold: 20
+
+# 信号设置
+signals:
+  risk_reward_ratio: 3.0
+  strategy: "Supertrend和DEMA策略"
+
+# 回测设置
+backtest:
+  initial_capital: 10000.0
+  leverage: 1.0
+  risk_per_trade: 0.02
+  enable_excel_export: true
+  output_dir: "trades"
+
+# 机器学习设置
+enable_ml: false  # 是否启用机器学习增强
+
+# 机器学习集成设置
+ml_integration:
+  confidence_threshold: 0.6      # 执行交易的最低置信度
+  signal_weight_technical: 0.6   # 技术信号权重
+  signal_weight_ml: 0.4          # 机器学习信号权重
+
+# 机器学习引擎设置
+ml_signal_enhancer:
+  confidence_threshold: 0.6
+  update_frequency: 24   # 更新频率(小时)
+  enable_online_learning: true
+  model_types:
+    - "random_forest"
+    - "xgboost"
+    - "lightgbm"
+  ensemble_method: "voting"
+  test_size: 0.2
+  lookback_periods: [5, 10, 20, 50]
+  ma_periods: [7, 14, 21, 50, 100, 200]
+  volatility_periods: [10, 20, 30]
+  target_periods: [1, 3, 5]
+  scale_features: true
+
+# 日志设置
+logging:
+  level: "INFO"
+  file: "trading_system.log"
+  enable_console: true 

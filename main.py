@@ -1,8 +1,7 @@
 # =============================================================================
-# 比特币交易策略回测系统 - 优化版本
-# 功能：基于Supertrend和DEMA指标的交易策略回测、参数优化和性能分析
-# 作者：AI助手优化版本
-# 版本：2.0 (优化版)
+# 比特币交易策略回测系统 - 优化整合版本
+# 功能：整合传统技术指标交易系统与机器学习增强系统
+# 版本：3.0 (整合版)
 # =============================================================================
 
 # 标准库导入
@@ -15,11 +14,8 @@ import matplotlib.pyplot as plt           # 绘图基础库
 import mplfinance as mpf                  # 金融数据可视化
 import warnings                           # 警告控制
 
-# 自定义模块导入 - 使用优化版本
-from data import DataManager                    # 数据管理器 - 负责数据获取和缓存
-from indicators import OptimizedIndicatorCalculator  # 优化指标计算器 - 使用向量化操作
-from signals import SignalGenerator                  # 信号生成器 - 基于指标生成交易信号
-from trade_recorder import OptimizedTradeRecorder    # 优化交易记录器 - 使用向量化回测
+# 导入整合系统
+from trading_system_integrator import TradingSystemIntegrator, create_trading_system
 
 # 性能优化设置
 # 忽略pandas性能警告和用户警告以提高运行速度
@@ -43,8 +39,13 @@ def load_config():
             with open("config.yaml", "r", encoding="utf-8") as file:
                 config = yaml.safe_load(file)
                 return config
+        elif os.path.exists("config_default.yaml"):
+            # 如果主配置不存在，尝试使用默认配置
+            with open("config_default.yaml", "r", encoding="utf-8") as file:
+                config = yaml.safe_load(file)
+                return config
         else:
-            # 返回默认配置
+            # 返回内置默认配置
             return {
                 "trading": {
                     "symbol": "BTC/USDT",
@@ -72,103 +73,12 @@ def load_config():
                     "initial_capital": 10000,
                     "leverage": 1.0,
                     "risk_per_trade": 0.02
-                }
+                },
+                "enable_ml": False
             }
     except Exception as e:
         print(f"加载配置文件失败: {e}")
         return {}
-
-def fetch_data_optimized(config, start_time=None, end_time=None, use_local_data=None, cache_file=None):
-    """
-    优化的数据获取函数
-    
-    功能说明:
-    - 优先使用本地缓存文件提高加载速度
-    - 如果没有缓存，从交易所API获取数据
-    - 支持灵活的时间范围设置
-    
-    参数:
-        config (dict): 系统配置
-        start_time (str): 开始时间 (YYYY-MM-DD)
-        end_time (str): 结束时间 (YYYY-MM-DD)
-        use_local_data (bool): 是否使用本地数据
-        cache_file (str): 指定的缓存文件路径
-    
-    返回:
-        pd.DataFrame: K线数据，包含 OHLCV 列
-    """
-    # 初始化数据管理器
-    print("初始化数据管理器...")
-    data_manager = DataManager(config)
-    
-    # 如果指定了本地数据文件，直接加载
-    if cache_file and os.path.exists(cache_file):
-        print(f"使用指定的本地数据文件: {cache_file}")
-        data_df = data_manager.fetch_klines(cache_file=cache_file)
-        if data_df is None or data_df.empty:
-            print("从指定文件加载数据失败，请检查文件路径。")
-            return None
-        print(f"成功加载 {len(data_df)} 条K线数据")
-        return data_df
-    
-    # 其他数据获取逻辑保持不变
-    return data_manager.fetch_klines(start_time, end_time, use_local_data)
-
-def calculate_indicators_optimized(config, data_df):
-    """优化的指标计算"""
-    if data_df is None or data_df.empty:
-        print("没有数据，无法计算指标")
-        return None
-    
-    print("使用优化版本计算技术指标...")
-    # 使用优化的指标计算器
-    indicator_calculator = OptimizedIndicatorCalculator(config)
-    indicators_df = indicator_calculator.calculate_all_indicators_optimized(data_df)
-    return indicators_df
-
-def generate_signals_optimized(config, indicators_df):
-    """优化的信号生成"""
-    if indicators_df is None or indicators_df.empty:
-        print("没有指标数据，无法生成信号")
-        return None
-    
-    strategy_name = config.get("signals", {}).get("strategy", "Supertrend和DEMA策略")
-    print(f"使用策略: {strategy_name}")
-    
-    print("生成交易信号...")
-    signal_generator = SignalGenerator(config)
-    signals_df = signal_generator.generate_signals(indicators_df)
-    signals_df = signal_generator.calculate_risk_reward(signals_df)
-    
-    # 在DataFrame的属性中保存策略名称
-    signals_df.attrs["strategy_name"] = strategy_name
-    
-    return signals_df
-
-def process_trades_optimized(config, signals_df):
-    """优化的交易处理"""
-    if signals_df is None or signals_df.empty:
-        print("没有信号数据，无法处理交易")
-        return None, None
-    
-    print("使用优化版本处理交易信号...")
-    # 使用优化的交易记录器
-    trade_recorder = OptimizedTradeRecorder(config)
-    backtest_df = trade_recorder.process_signals_vectorized(signals_df)
-    
-    # 获取交易统计
-    summary = trade_recorder.get_trade_summary()
-    print("\n===== 交易统计 =====")
-    for key, value in summary.items():
-        if isinstance(value, float):
-            if key in ['胜率', '最大回撤', '净利润率']:
-                print(f"{key}: {value:.2%}")
-            else:
-                print(f"{key}: {value:.2f}")
-        else:
-            print(f"{key}: {value}")
-    
-    return backtest_df, trade_recorder
 
 def visualize_strategy_optimized(signals_df, title=None):
     """优化的策略可视化"""
@@ -182,6 +92,12 @@ def visualize_strategy_optimized(signals_df, title=None):
     required_cols = ['open', 'high', 'low', 'close', 'volume', 
                     'dema144', 'dema169', 'supertrend_upper', 'supertrend_lower',
                     'buy_signal', 'sell_signal']
+    
+    # 确保所有必要列都存在
+    for col in required_cols:
+        if col not in signals_df.columns:
+            print(f"缺少必要的列: {col}，无法可视化")
+            return
     
     plot_data = signals_df[required_cols].copy()
     
@@ -246,210 +162,48 @@ def visualize_strategy_optimized(signals_df, title=None):
         print(f"可视化过程中出现错误: {e}")
         print("建议检查数据格式或减少数据量")
 
-def run_strategy_optimized(data_source=None, start_time=None, end_time=None, 
-                          visualize=False, custom_config=None, export_excel=True):
-    """
-    优化版本的策略运行函数
-    
-    参数:
-        data_source (str or pd.DataFrame): 数据源
-        start_time (str): 开始时间
-        end_time (str): 结束时间
-        visualize (bool): 是否可视化
-        custom_config (dict): 自定义配置
-        export_excel (bool): 是否导出Excel
-        
-    返回:
-        tuple: (DataFrame, TradeRecorder对象)
-    """
-    print("=== 运行优化版本的策略 ===")
-    
-    # 加载配置
-    config = custom_config if custom_config else load_config()
-    
-    # 获取数据
-    if isinstance(data_source, pd.DataFrame):
-        data_df = data_source
-    else:
-        data_df = fetch_data_optimized(config, start_time, end_time, None, data_source)
-    
-    if data_df is None:
-        return None, None
-    
-    # 计算指标
-    indicators_df = calculate_indicators_optimized(config, data_df)
-    
-    if indicators_df is None:
-        return None, None
-    
-    # 生成信号
-    signals_df = generate_signals_optimized(config, indicators_df)
-    
-    if signals_df is None:
-        return None, None
-    
-    # 处理交易
-    backtest_df, trade_recorder = process_trades_optimized(config, signals_df)
-    
-    # 确保返回的DataFrame包含处理后的交易数据
-    if backtest_df is not None:
-        signals_df = backtest_df
-    
-    # 可视化
-    if visualize:
-        visualize_strategy_optimized(signals_df)
-    
-    # 导出到Excel (使用简化版本)
-    if export_excel and trade_recorder is not None:
-        output_file = trade_recorder.export_to_excel_streamlined(signals_df)
-        if output_file:
-            print(f"交易记录已导出至: {output_file}")
-    
-    return signals_df, trade_recorder
-
-def performance_comparison():
-    """性能对比测试"""
-    print("\n=== 性能对比测试 ===")
-    
-    # 加载配置和数据
-    config = load_config()
-    data_manager = DataManager(config)
-    local_files = data_manager.list_local_data()
-    
-    if not local_files:
-        print("未找到本地数据文件，无法进行性能对比")
+def show_ml_performance(system):
+    """显示机器学习模型性能"""
+    if not system.has_ml_support or system.ml_enhancer is None:
+        print("机器学习功能未启用")
         return
     
-    # 选择第一个可用的数据文件
-    data_file = local_files[0]["file_path"]
-    print(f"使用数据文件: {data_file}")
-    
-    # 加载数据
-    data_df = fetch_data_optimized(config, cache_file=data_file)
-    if data_df is None:
-        print("数据加载失败")
-        return
-    
-    # 限制数据量进行测试
-    test_data = data_df.tail(1000).copy()  # 使用最后1000行数据
-    print(f"测试数据大小: {len(test_data)} 行")
-    
-    import time
-    
-    # 测试原版本
     try:
-        from indicators import IndicatorCalculator
-        from trade_recorder import TradeRecorder
+        ml_status = system.get_system_status().get("ml_status", {})
         
-        print("\n--- 原版本测试 ---")
-        start_time = time.time()
+        if not ml_status:
+            print("未获取到机器学习状态信息")
+            return
         
-        # 指标计算
-        indicator_calc = IndicatorCalculator(config)
-        indicators_df1 = indicator_calc.calculate_all_indicators(test_data)
+        print("\n===== 机器学习模型性能 =====")
         
-        # 信号生成
-        signal_generator = SignalGenerator(config)
-        signals_df1 = signal_generator.generate_signals(indicators_df1)
+        # 显示基本信息
+        print(f"模型训练状态: {'已训练' if ml_status.get('trained', False) else '未训练'}")
+        print(f"最后更新时间: {ml_status.get('last_update', '未知')}")
+        print(f"特征数量: {ml_status.get('feature_count', 0)}")
+        print(f"置信度阈值: {ml_status.get('confidence_threshold', 0.6)}")
         
-        # 交易处理
-        trade_recorder1 = TradeRecorder(config)
-        backtest_df1 = trade_recorder1.process_signals(signals_df1)
-        
-        time1 = time.time() - start_time
-        print(f"原版本总耗时: {time1:.2f}秒")
-        
-    except ImportError:
-        print("原版本文件不存在，跳过对比")
-        time1 = None
-    
-    # 测试优化版本
-    print("\n--- 优化版本测试 ---")
-    start_time = time.time()
-    
-    # 指标计算
-    indicator_calc_opt = OptimizedIndicatorCalculator(config)
-    indicators_df2 = indicator_calc_opt.calculate_all_indicators_optimized(test_data)
-    
-    # 信号生成
-    signal_generator = SignalGenerator(config)
-    signals_df2 = signal_generator.generate_signals(indicators_df2)
-    
-    # 交易处理
-    trade_recorder2 = OptimizedTradeRecorder(config)
-    backtest_df2 = trade_recorder2.process_signals_vectorized(signals_df2)
-    
-    time2 = time.time() - start_time
-    print(f"优化版本总耗时: {time2:.2f}秒")
-    
-    # 性能对比
-    if time1 is not None:
-        improvement = (time1 - time2) / time1 * 100
-        print(f"\n=== 性能提升 ===")
-        print(f"速度提升: {improvement:.1f}%")
-        print(f"时间节省: {time1 - time2:.2f}秒")
-    
-    # 内存占用对比
-    import psutil
-    import os
-    process = psutil.Process(os.getpid())
-    memory_mb = process.memory_info().rss / 1024 / 1024
-    print(f"当前内存占用: {memory_mb:.1f} MB")
+        # 显示指标
+        metrics = ml_status.get("metrics", {})
+        if metrics:
+            print("\n模型性能指标:")
+            for model_name, model_metrics in metrics.items():
+                print(f"  {model_name}:")
+                for metric_name, value in model_metrics.items():
+                    if isinstance(value, float):
+                        print(f"    {metric_name}: {value:.4f}")
+                    else:
+                        print(f"    {metric_name}: {value}")
+    except Exception as e:
+        print(f"获取机器学习性能信息失败: {e}")
 
-def main():
-    """
-    系统主入口函数 - 优化版本
+def run_backtest_menu(system):
+    """运行回测菜单"""
+    print("\n===== 回测系统 =====")
     
-    功能说明:
-    - 提供交互式菜单选择交易策略
-    - 支持回测、性能比较、杠杆优化功能
-    - 使用优化的算法和向量化操作提高性能
-    """
-    print("\n===== 比特币交易策略回测系统 (优化版本) =====")
-    
-    # 加载配置
-    config = load_config()
-    
-    # 获取可用策略列表
-    from signals import StrategyFactory
-    available_strategies = StrategyFactory.get_strategy_list()
-    
-    # 选择策略
-    print("\n可用策略:")
-    for i, strategy in enumerate(available_strategies):
-        print(f"{i+1}. {strategy}")
-    
-    current_strategy = config.get("signals", {}).get("strategy", "Supertrend和DEMA策略")
-    print(f"当前配置中的策略: {current_strategy}")
-    
-    strategy_choice = input(f"请选择策略 (1-{len(available_strategies)}): ")
-    try:
-        strategy_index = int(strategy_choice) - 1
-        if 0 <= strategy_index < len(available_strategies):
-            config["signals"]["strategy"] = available_strategies[strategy_index]
-            print(f"已选择策略: {config['signals']['strategy']}")
-        else:
-            print("无效的选择，使用默认策略")
-    except ValueError:
-        print("无效的输入，使用默认策略")
-    
-    # 选择功能
-    print("\n选择功能:")
-    print("1. 回测策略 (优化版本)")
-    print("2. 性能对比测试")
-    print("3. 基本杠杆优化")
-    print("4. 动态杠杆优化 (自适应搜索)")
-    
-    function_choice = input("请选择功能 (1-4): ")
-    
-    if function_choice == "1":
-        # 回测策略
-        print("\n===== 回测策略 (优化版本) =====")
-        
-        # 搜索本地数据文件
-        data_manager = DataManager(config)
-        print("正在搜索本地数据文件...")
-        local_files = data_manager.list_local_data()
+    # 检查本地数据文件
+    if hasattr(system, 'data_manager') and hasattr(system.data_manager, 'list_local_data'):
+        local_files = system.data_manager.list_local_data()
         
         if local_files:
             print(f"找到{len(local_files)}个本地数据文件:")
@@ -468,56 +222,398 @@ def main():
                 if 0 <= file_index < len(local_files):
                     selected_file = local_files[file_index]["file_path"]
                     
+                    # 选择是否使用ML
+                    use_ml = False
+                    if system.has_ml_support:
+                        ml_choice = input("是否使用机器学习增强信号? (y/n): ").lower()
+                        use_ml = ml_choice in ['y', 'yes']
+                    
                     # 是否开启可视化
                     vis_choice = input("是否显示策略可视化图表? (y/n): ").lower()
                     enable_visualization = vis_choice in ['y', 'yes']
                     
-                    # 运行优化版本策略
-                    signals_df, trade_recorder = run_strategy_optimized(
+                    # 运行回测
+                    print(f"开始回测 {selected_file}...")
+                    backtest_result = system.run_backtest(
                         data_source=selected_file, 
-                        visualize=enable_visualization, 
-                        custom_config=config
+                        use_ml=use_ml
                     )
                     
-                    if signals_df is not None:
-                        print("策略回测完成!")
+                    if backtest_result["success"]:
+                        signals_df = backtest_result["signals_df"]
+                        trade_recorder = backtest_result["trade_recorder"]
+                        summary = backtest_result["summary"]
+                        
+                        # 显示回测结果
+                        print("\n===== 回测结果 =====")
+                        for key, value in summary.items():
+                            if isinstance(value, float):
+                                if key in ['胜率', '最大回撤', '净利润率']:
+                                    print(f"{key}: {value:.2%}")
+                                else:
+                                    print(f"{key}: {value:.2f}")
+                            else:
+                                print(f"{key}: {value}")
+                        
+                        # 显示可视化
+                        if enable_visualization:
+                            visualize_strategy_optimized(signals_df)
+                        
+                        # 如果使用了ML，显示ML性能
+                        if use_ml:
+                            show_ml_performance(system)
+                        
                     else:
-                        print("回测失败!")
+                        print(f"回测失败: {backtest_result.get('error', '未知错误')}")
+                    
                 else:
                     print("无效的选择!")
             except ValueError:
                 print("请输入有效的数字")
         else:
             print("未找到本地数据文件")
-    
-    elif function_choice == "2":
-        # 性能对比测试
-        performance_comparison()
-    
-    elif function_choice == "3":
-        # 基本杠杆优化
-        print("\n===== 基本杠杆优化 =====")
-        try:
-            from leverage_optimizer import main as run_leverage_optimizer
-            run_leverage_optimizer()
-        except ImportError:
-            print("杠杆优化模块未找到")
-        except Exception as e:
-            print(f"运行杠杆优化时出错: {e}")
-    
-    elif function_choice == "4":
-        # 动态杠杆优化
-        print("\n===== 动态杠杆优化 =====")
-        try:
-            from dynamic_leverage_optimizer import main as run_dynamic_optimizer
-            run_dynamic_optimizer()
-        except ImportError:
-            print("动态杠杆优化模块未找到")
-        except Exception as e:
-            print(f"运行动态杠杆优化时出错: {e}")
-    
     else:
-        print("无效的选择!")
+        print("数据管理器初始化失败，无法列出本地文件")
+
+def train_ml_models_menu(system):
+    """训练机器学习模型菜单"""
+    if not system.has_ml_support or system.ml_enhancer is None:
+        print("机器学习功能未启用，请在配置文件中设置 enable_ml: true")
+        return
+    
+    print("\n===== 训练机器学习模型 =====")
+    
+    # 检查本地数据文件
+    if hasattr(system, 'data_manager') and hasattr(system.data_manager, 'list_local_data'):
+        local_files = system.data_manager.list_local_data()
+        
+        if local_files:
+            print(f"找到{len(local_files)}个本地数据文件:")
+            for i, file_info in enumerate(local_files):
+                file_path = file_info.get("file_path", "")
+                symbol = file_info.get("symbol", "未知")
+                timeframe = file_info.get("timeframe", "未知")
+                start_date = file_info.get("start_date", "未知")
+                end_date = file_info.get("end_date", "未知")
+                row_count = file_info.get("row_count", 0)
+                print(f"{i+1}. {symbol}/{timeframe} - {start_date} 至 {end_date}, 共{row_count}行")
+            
+            file_choice = input(f"请选择训练数据文件 (1-{len(local_files)}): ")
+            try:
+                file_index = int(file_choice) - 1
+                if 0 <= file_index < len(local_files):
+                    selected_file = local_files[file_index]["file_path"]
+                    
+                    # 加载数据
+                    print(f"加载训练数据: {selected_file}...")
+                    data_df = system.data_manager.fetch_klines(cache_file=selected_file)
+                    
+                    if data_df is not None and not data_df.empty:
+                        # 训练模型
+                        print("开始训练机器学习模型...")
+                        training_result = system.train_ml_models(data_df)
+                        
+                        if training_result.get("success", False):
+                            # 详细的训练结果已经在ModelTrainer中显示了
+                            # 这里只显示模型性能对比表
+                            metrics = training_result.get("metrics", {})
+                            if metrics:
+                                print("\n📈 模型性能对比:")
+                                print(f"{'模型名称':<15} {'准确率':<8} {'AUC':<8} {'精确率':<8} {'召回率':<8}")
+                                print("-" * 55)
+                                for model_name, model_metrics in metrics.items():
+                                    accuracy = model_metrics.get('accuracy', 0)
+                                    auc = model_metrics.get('auc', 0)
+                                    precision = model_metrics.get('precision', 0)
+                                    recall = model_metrics.get('recall', 0)
+                                    
+                                    # 标记最佳模型
+                                    marker = "⭐" if model_name == training_result.get('best_model') else "  "
+                                    print(f"{marker} {model_name:<13} {accuracy:.1%}    {auc:.3f}    {precision:.1%}    {recall:.1%}")
+                        else:
+                            print(f"❌ 模型训练失败: {training_result.get('error', '未知错误')}")
+                    else:
+                        print("数据加载失败")
+                else:
+                    print("无效的选择!")
+            except ValueError:
+                print("请输入有效的数字")
+        else:
+            print("未找到本地数据文件")
+    else:
+        print("数据管理器初始化失败，无法列出本地文件")
+
+def update_ml_models_menu(system):
+    """更新机器学习模型菜单"""
+    if not system.has_ml_support or system.ml_enhancer is None:
+        print("机器学习功能未启用")
+        return
+    
+    print("\n===== 更新机器学习模型 =====")
+    
+    # 检查ML状态
+    ml_status = system.get_system_status().get("ml_status", {})
+    if not ml_status.get("trained", False):
+        print("模型尚未训练，请先训练模型")
+        return
+    
+    # 检查本地数据文件
+    if hasattr(system, 'data_manager') and hasattr(system.data_manager, 'list_local_data'):
+        local_files = system.data_manager.list_local_data()
+        
+        if local_files:
+            print(f"找到{len(local_files)}个本地数据文件:")
+            for i, file_info in enumerate(local_files):
+                file_path = file_info.get("file_path", "")
+                symbol = file_info.get("symbol", "未知")
+                timeframe = file_info.get("timeframe", "未知")
+                start_date = file_info.get("start_date", "未知")
+                end_date = file_info.get("end_date", "未知")
+                row_count = file_info.get("row_count", 0)
+                print(f"{i+1}. {symbol}/{timeframe} - {start_date} 至 {end_date}, 共{row_count}行")
+            
+            file_choice = input(f"请选择更新数据文件 (1-{len(local_files)}): ")
+            try:
+                file_index = int(file_choice) - 1
+                if 0 <= file_index < len(local_files):
+                    selected_file = local_files[file_index]["file_path"]
+                    
+                    # 加载数据
+                    print(f"加载更新数据: {selected_file}...")
+                    data_df = system.data_manager.fetch_klines(cache_file=selected_file)
+                    
+                    if data_df is not None and not data_df.empty:
+                        # 更新模型
+                        print("开始更新机器学习模型...")
+                        update_result = system.update_ml_models(data_df)
+                        
+                        if update_result.get("success", False):
+                            if update_result.get("updated", False):
+                                print("模型更新成功!")
+                                print(f"性能提升: {update_result.get('performance_improvement', 0):.2f}%")
+                                
+                                # 显示新性能指标
+                                metrics = update_result.get("metrics", {})
+                                if metrics:
+                                    print("\n更新后的模型性能指标:")
+                                    for model_name, model_metrics in metrics.items():
+                                        print(f"  {model_name}:")
+                                        for metric_name, value in model_metrics.items():
+                                            if isinstance(value, float):
+                                                print(f"    {metric_name}: {value:.4f}")
+                                            else:
+                                                print(f"    {metric_name}: {value}")
+                            else:
+                                print(f"模型未更新: {update_result.get('reason', '性能未提升')}")
+                        else:
+                            print(f"模型更新失败: {update_result.get('error', '未知错误')}")
+                    else:
+                        print("数据加载失败")
+                else:
+                    print("无效的选择!")
+            except ValueError:
+                print("请输入有效的数字")
+        else:
+            print("未找到本地数据文件")
+    else:
+        print("数据管理器初始化失败，无法列出本地文件")
+
+def live_signal_menu(system):
+    """实时信号生成菜单"""
+    print("\n===== 生成实时交易信号 =====")
+    
+    # 检查本地数据文件
+    if hasattr(system, 'data_manager') and hasattr(system.data_manager, 'list_local_data'):
+        local_files = system.data_manager.list_local_data()
+        
+        if local_files:
+            print(f"找到{len(local_files)}个本地数据文件:")
+            for i, file_info in enumerate(local_files):
+                file_path = file_info.get("file_path", "")
+                symbol = file_info.get("symbol", "未知")
+                timeframe = file_info.get("timeframe", "未知")
+                start_date = file_info.get("start_date", "未知")
+                end_date = file_info.get("end_date", "未知")
+                row_count = file_info.get("row_count", 0)
+                print(f"{i+1}. {symbol}/{timeframe} - {start_date} 至 {end_date}, 共{row_count}行")
+            
+            file_choice = input(f"请选择数据文件 (1-{len(local_files)}): ")
+            try:
+                file_index = int(file_choice) - 1
+                if 0 <= file_index < len(local_files):
+                    selected_file = local_files[file_index]["file_path"]
+                    
+                    # 选择是否使用ML
+                    use_ml = False
+                    if system.has_ml_support:
+                        ml_choice = input("是否使用机器学习增强信号? (y/n): ").lower()
+                        use_ml = ml_choice in ['y', 'yes']
+                        
+                        # 如果使用ML但模型未训练，提示训练
+                        if use_ml:
+                            ml_status = system.get_system_status().get("ml_status", {})
+                            if not ml_status.get("trained", False):
+                                print("模型尚未训练，请先训练模型")
+                                return
+                    
+                    # 加载数据
+                    print(f"加载市场数据: {selected_file}...")
+                    data_df = system.data_manager.fetch_klines(cache_file=selected_file)
+                    
+                    if data_df is not None and not data_df.empty:
+                        # 选择预测点
+                        latest_date = data_df.index[-1]
+                        print(f"最新数据日期: {latest_date}")
+                        days_back = input("想查看多少天前的信号? (0表示最新): ")
+                        
+                        try:
+                            days = int(days_back)
+                            if days > 0:
+                                if days >= len(data_df):
+                                    days = len(data_df) - 1
+                                signal_data = data_df.iloc[:-days]
+                            else:
+                                signal_data = data_df
+                            
+                            # 生成信号
+                            print("生成交易信号...")
+                            signal_result = system.generate_live_signal(
+                                signal_data,
+                                use_ml=use_ml
+                            )
+                            
+                            if signal_result.get("success", False):
+                                signal = signal_result.get("signal", {})
+                                
+                                print("\n===== 交易信号 =====")
+                                print(f"时间: {signal.get('timestamp', '')}")
+                                
+                                direction_map = {1: "做多", -1: "做空", 0: "中性"}
+                                direction = direction_map.get(signal.get('final_signal', 0), "未知")
+                                
+                                print(f"信号方向: {direction}")
+                                print(f"信号置信度: {signal.get('confidence', 0):.2f}")
+                                
+                                # 如果有ML信号，显示ML信息
+                                if signal.get('ml_signal') is not None:
+                                    ml_direction = direction_map.get(signal.get('ml_signal', 0), "未知")
+                                    print(f"\nML信号: {ml_direction}")
+                                    print(f"ML置信度: {signal.get('ml_confidence', 0):.2f}")
+                                    print(f"技术信号: {direction_map.get(signal.get('technical_signal', 0), '未知')}")
+                                
+                                # 如果有方向，显示风险管理信息
+                                if signal.get('direction'):
+                                    print(f"\n方向: {signal.get('direction')}")
+                                    if signal.get('stop_loss'):
+                                        print(f"止损价: {signal.get('stop_loss'):.2f}")
+                                    if signal.get('target'):
+                                        print(f"止盈价: {signal.get('target'):.2f}")
+                            else:
+                                print(f"信号生成失败: {signal_result.get('error', '未知错误')}")
+                        except ValueError:
+                            print("请输入有效的数字")
+                    else:
+                        print("数据加载失败")
+                else:
+                    print("无效的选择!")
+            except ValueError:
+                print("请输入有效的数字")
+        else:
+            print("未找到本地数据文件")
+    else:
+        print("数据管理器初始化失败，无法列出本地文件")
+
+def main():
+    """
+    系统主入口函数 - 整合版本
+    
+    功能说明:
+    - 提供交互式菜单选择交易策略
+    - 支持传统交易系统和机器学习增强系统
+    - 支持回测、性能比较、杠杆优化功能
+    - 使用优化的算法和向量化操作提高性能
+    """
+    print("\n===== 比特币交易策略回测系统 (整合优化版本) =====")
+    
+    # 加载配置
+    config = load_config()
+    
+    # 创建整合系统
+    print("初始化交易系统...")
+    system = create_trading_system()
+    
+    # 获取系统状态
+    system_status = system.get_system_status()
+    
+    # 显示系统状态
+    print(f"系统初始化状态: {'成功' if system_status['is_initialized'] else '失败'}")
+    print(f"机器学习支持: {'已启用' if system_status['has_ml_support'] else '未启用'}")
+    print(f"当前策略: {system_status['current_strategy']}")
+    
+    # 获取可用策略列表
+    available_strategies = system.get_available_strategies()
+    
+    # 选择功能菜单
+    while True:
+        print("\n选择功能:")
+        print("1. 回测策略")
+        print("2. 生成实时交易信号")
+        print("3. 训练机器学习模型")
+        print("4. 更新机器学习模型")
+        print("5. 杠杆优化工具")
+        print("6. 显示系统状态")
+        print("0. 退出")
+        
+        function_choice = input("请选择功能 (0-6): ")
+        
+        if function_choice == "1":
+            # 回测策略
+            run_backtest_menu(system)
+            
+        elif function_choice == "2":
+            # 生成实时信号
+            live_signal_menu(system)
+            
+        elif function_choice == "3":
+            # 训练ML模型
+            train_ml_models_menu(system)
+            
+        elif function_choice == "4":
+            # 更新ML模型
+            update_ml_models_menu(system)
+            
+        elif function_choice == "5":
+            # 杠杆优化
+            print("\n===== 杠杆优化工具 =====")
+            try:
+                from leverage_optimizer import main as run_leverage_optimizer
+                run_leverage_optimizer()
+            except ImportError:
+                print("杠杆优化模块未找到")
+            except Exception as e:
+                print(f"运行杠杆优化时出错: {e}")
+                
+        elif function_choice == "6":
+            # 显示系统状态
+            print("\n===== 系统状态 =====")
+            status = system.get_system_status()
+            
+            print(f"系统初始化: {'成功' if status['is_initialized'] else '失败'}")
+            print(f"机器学习支持: {'已启用' if status['has_ml_support'] else '未启用'}")
+            print(f"当前策略: {status['current_strategy']}")
+            print(f"数据准备: {'完成' if status['data_ready'] else '未完成'}")
+            
+            # 如果有ML状态，显示ML信息
+            if status.get('ml_status'):
+                show_ml_performance(system)
+                
+        elif function_choice == "0":
+            # 退出
+            print("系统退出，谢谢使用!")
+            break
+            
+        else:
+            print("无效的选择!")
 
 if __name__ == "__main__":
     main()
