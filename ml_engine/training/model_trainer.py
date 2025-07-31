@@ -26,6 +26,7 @@ from datetime import datetime
 import os
 from tqdm import tqdm
 import time
+from ..utils.training_checkpoint import TrainingCheckpoint
 
 warnings.filterwarnings('ignore')
 
@@ -67,7 +68,258 @@ class ModelTrainer:
         self.trained_models = {}
         self.model_metrics = {}
         
+        # 初始化检查点管理器
+        self.enable_checkpoints = self.trainer_config.get("enable_checkpoints", True)
+        if self.enable_checkpoints:
+            self.checkpoint_manager = TrainingCheckpoint(config)
+        else:
+            self.checkpoint_manager = None
+        
         self.logger.info("模型训练器初始化完成")
+    
+    def train_models_with_checkpoint(self, X: pd.DataFrame, y: pd.Series, 
+                                    resume_session_id: Optional[str] = None) -> Dict:
+        """
+        训练多个机器学习模型（支持中断恢复）
+        
+        参数:
+            X (pd.DataFrame): 特征数据
+            y (pd.Series): 目标变量
+            resume_session_id (str, optional): 要恢复的会话ID
+            
+        返回:
+            Dict: 训练结果
+        """
+        if not self.enable_checkpoints:
+            self.logger.warning("检查点功能未启用，使用常规训练模式")
+            return self.train_models(X, y)
+        
+        try:
+            # 尝试恢复训练
+            resume_data = None
+            if resume_session_id or self.checkpoint_manager:
+                self.logger.info("检查是否有可恢复的训练会话...")
+                resume_result = self.checkpoint_manager.resume_training(resume_session_id)
+                
+                if resume_result['success']:
+                    resume_data = resume_result
+                    self.logger.info(f"恢复训练会话: {resume_data['session_id']}")
+                    self.logger.info(f"已完成 {len(resume_data['completed_models'])} 个模型，还需训练 {len(resume_data['remaining_models'])} 个")
+                    
+                    # 使用保存的训练数据（如果可用）
+                    if resume_data['training_data']:
+                        X = resume_data['training_data']['X_train']
+                        y = resume_data['training_data']['y_train']
+                        self.logger.info("使用保存的训练数据")
+                else:
+                    self.logger.info("没有可恢复的训练会话，开始新训练")
+            
+            # 数据划分
+            print("📊 准备训练数据...")
+            X_train, X_test, y_train, y_test = self._split_data(X, y)
+            print(f"   • 训练集: {len(X_train)} 样本")
+            print(f"   • 测试集: {len(X_test)} 样本")
+            
+            # 确定要训练的模型
+            if resume_data:
+                # 恢复模式：只训练剩余的模型
+                models_to_train = resume_data['remaining_models']
+                completed_models = resume_data['completed_models']
+                completed_metrics = resume_data['model_metrics']
+                session_id = resume_data['session_id']
+            else:
+                # 新训练模式：训练所有模型
+                models_to_train = self.model_types.copy()
+                completed_models = {}
+                completed_metrics = {}
+                
+                # 创建新的训练会话
+                training_config = {
+                    'model_types': self.model_types.copy(),
+                    'test_size': self.test_size,
+                    'enable_hyperopt': self.enable_hyperopt,
+                    'n_trials': self.n_trials
+                }
+                session_id = self.checkpoint_manager.start_training_session(training_config, X_train, y_train)
+            
+            print(f"\n🤖 {'继续' if resume_data else '开始'}训练 {len(models_to_train)} 个模型")
+            
+            # 使用进度条显示训练进程
+            with tqdm(total=len(models_to_train), desc="🔥 模型训练进度", 
+                     bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+                     ncols=100) as pbar:
+                
+                for model_type in models_to_train:
+                    model_start = time.time()
+                    pbar.set_description(f"🔥 训练{model_type}")
+                    
+                    try:
+                        self.logger.info(f"训练 {model_type} 模型...")
+                        
+                        # 获取模型和参数
+                        model, param_grid = self._get_model_and_params(model_type)
+                        
+                        # 超参数优化
+                        if self.enable_hyperopt:
+                            best_model = self._optimize_hyperparameters(
+                                model, X_train, y_train, model_type
+                            )
+                        else:
+                            best_model = model.fit(X_train, y_train)
+                        
+                        # 评估模型
+                        model_metrics = self._evaluate_model(
+                            best_model, X_test, y_test, model_type
+                        )
+                        
+                        # 保存模型到检查点
+                        self.checkpoint_manager.save_model_progress(
+                            model_type, best_model, model_metrics
+                        )
+                        
+                        # 更新已完成的模型
+                        completed_models[model_type] = best_model
+                        completed_metrics[model_type] = model_metrics
+                        
+                        # 更新进度条
+                        model_time = time.time() - model_start
+                        accuracy = model_metrics['accuracy']
+                        pbar.set_postfix({"准确率": f"{accuracy:.1%}", "耗时": f"{model_time:.1f}s"})
+                        pbar.update(1)
+                        
+                        self.logger.info(f"{model_type} 训练完成，准确率: {accuracy:.4f}")
+                        
+                    except Exception as e:
+                        self.logger.error(f"{model_type} 训练失败: {str(e)}")
+                        # 继续训练其他模型
+                        pbar.update(1)
+                        continue
+            
+            print(f"\n💾 保存训练结果...")
+            
+            # 保存最终模型
+            self._save_trained_models(completed_models)
+            
+            # 更新内部状态
+            self.trained_models = completed_models
+            self.model_metrics = completed_metrics
+            
+            # 完成训练会话
+            final_results = {
+                'models': completed_models,
+                'metrics': completed_metrics,
+                'training_samples': len(X_train),
+                'test_samples': len(X_test),
+                'feature_count': X.shape[1]
+            }
+            
+            if self.checkpoint_manager:
+                self.checkpoint_manager.complete_training_session(final_results)
+            
+            # 训练总结
+            total_completed = len(completed_models)
+            best_model_name = self._select_best_model(completed_metrics)
+            best_accuracy = completed_metrics[best_model_name]['accuracy'] if best_model_name else 0
+            
+            print(f"\n🎉 模型训练完成!")
+            print(f"   • 完成模型: {total_completed} 个")
+            print(f"   • 最佳模型: {best_model_name} (准确率: {best_accuracy:.1%})" if best_model_name else "")
+            print(f"   • 训练样本: {len(X_train)} 个")
+            print(f"   • 测试样本: {len(X_test)} 个")
+            
+            results = {
+                'success': True,
+                'models': completed_models,
+                'metrics': completed_metrics,
+                'best_model': best_model_name,
+                'training_samples': len(X_train),
+                'test_samples': len(X_test),
+                'feature_count': X.shape[1],
+                'session_id': session_id,
+                'resumed': resume_data is not None
+            }
+            
+            self.logger.info("模型训练完成")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"带检查点的模型训练失败: {str(e)}")
+            return {'success': False, 'error': str(e)}
+    
+    def list_training_checkpoints(self) -> List[Dict]:
+        """
+        列出可用的训练检查点
+        
+        返回:
+            List[Dict]: 检查点列表
+        """
+        if not self.checkpoint_manager:
+            return []
+        
+        return self.checkpoint_manager.list_checkpoints()
+    
+    def resume_training_from_checkpoint(self, session_id: str, 
+                                      X: Optional[pd.DataFrame] = None, 
+                                      y: Optional[pd.Series] = None) -> Dict:
+        """
+        从指定检查点恢复训练
+        
+        参数:
+            session_id (str): 会话ID
+            X (pd.DataFrame, optional): 新的训练数据（如果不提供，将使用保存的数据）
+            y (pd.Series, optional): 新的训练标签
+            
+        返回:
+            Dict: 训练结果
+        """
+        if not self.checkpoint_manager:
+            return {'success': False, 'error': '检查点功能未启用'}
+        
+        if X is not None and y is not None:
+            return self.train_models_with_checkpoint(X, y, session_id)
+        else:
+            # 使用保存的数据恢复训练
+            resume_result = self.checkpoint_manager.resume_training(session_id)
+            if not resume_result['success']:
+                return resume_result
+            
+            if not resume_result['training_data']:
+                return {
+                    'success': False, 
+                    'error': '检查点中没有保存训练数据，请提供新的训练数据'
+                }
+            
+            saved_data = resume_result['training_data']
+            return self.train_models_with_checkpoint(saved_data['X_train'], saved_data['y_train'], session_id)
+    
+    def delete_training_checkpoint(self, session_id: str) -> bool:
+        """
+        删除指定的训练检查点
+        
+        参数:
+            session_id (str): 会话ID
+            
+        返回:
+            bool: 是否删除成功
+        """
+        if not self.checkpoint_manager:
+            return False
+        
+        return self.checkpoint_manager.delete_checkpoint(session_id)
+    
+    def get_checkpoint_stats(self) -> Dict:
+        """
+        获取检查点统计信息
+        
+        返回:
+            Dict: 统计信息
+        """
+        if not self.checkpoint_manager:
+            return {'checkpoints_enabled': False}
+        
+        stats = self.checkpoint_manager.get_checkpoint_stats()
+        stats['checkpoints_enabled'] = True
+        return stats
     
     def train_models(self, X: pd.DataFrame, y: pd.Series) -> Dict:
         """

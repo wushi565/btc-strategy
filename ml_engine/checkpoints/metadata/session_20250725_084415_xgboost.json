@@ -1,0 +1,14 @@
+{
+  "model_name": "xgboost",
+  "saved_at": "2025-07-25T08:54:42.469675",
+  "model_file": "ml_engine/checkpoints/models\\session_20250725_084415_xgboost.joblib",
+  "metrics": {
+    "accuracy": 0.5999606647654636,
+    "precision": 0.359952799265817,
+    "recall": 0.5999606647654636,
+    "f1_score": 0.44995206093842577,
+    "auc_roc": 0.5
+  },
+  "hyperparams": {},
+  "session_id": "session_20250725_084415"
+}

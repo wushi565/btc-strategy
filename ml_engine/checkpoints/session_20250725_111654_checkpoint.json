@@ -1,0 +1,73 @@
+{
+  "session_id": "session_20250725_111654",
+  "saved_at": "2025-07-25T11:29:36.766075",
+  "training_progress": {
+    "session_id": "session_20250725_111654",
+    "start_time": "2025-07-25T11:16:54.612731",
+    "training_config": {
+      "model_types": [
+        "random_forest",
+        "xgboost",
+        "lightgbm",
+        "logistic_regression"
+      ],
+      "test_size": 0.2,
+      "enable_hyperopt": true,
+      "n_trials": 100
+    },
+    "model_types": [
+      "random_forest",
+      "xgboost",
+      "lightgbm",
+      "logistic_regression"
+    ],
+    "completed_models": [
+      "random_forest",
+      "xgboost",
+      "lightgbm"
+    ],
+    "failed_models": [],
+    "current_model": null,
+    "total_models": 4,
+    "status": "completed",
+    "data_shape": {
+      "n_samples": 40672,
+      "n_features": 150
+    },
+    "end_time": "2025-07-25T11:29:36.765078",
+    "final_results": {
+      "model_paths": {
+        "random_forest": "models/random_forest_20250725_112936.joblib",
+        "xgboost": "models/xgboost_20250725_112936.joblib",
+        "lightgbm": "models/lightgbm_20250725_112936.joblib"
+      },
+      "metrics": {
+        "random_forest": {
+          "accuracy": 0.5999606647654636,
+          "precision": 0.359952799265817,
+          "recall": 0.5999606647654636,
+          "f1_score": 0.44995206093842577,
+          "auc_roc": 0.5
+        },
+        "xgboost": {
+          "accuracy": 0.5999606647654636,
+          "precision": 0.359952799265817,
+          "recall": 0.5999606647654636,
+          "f1_score": 0.44995206093842577,
+          "auc_roc": 0.5
+        },
+        "lightgbm": {
+          "accuracy": 0.5999606647654636,
+          "precision": 0.359952799265817,
+          "recall": 0.5999606647654636,
+          "f1_score": 0.44995206093842577,
+          "auc_roc": 0.5
+        }
+      },
+      "training_samples": 40672,
+      "test_samples": 10169,
+      "feature_count": 150
+    }
+  },
+  "checkpoint_version": "1.0"
+}

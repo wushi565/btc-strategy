@@ -1,0 +1,14 @@
+{
+  "model_name": "random_forest",
+  "saved_at": "2025-07-25T10:18:28.455183",
+  "model_file": "ml_engine/checkpoints/models\\session_20250725_100246_random_forest.joblib",
+  "metrics": {
+    "accuracy": 0.6,
+    "precision": 0.36,
+    "recall": 0.6,
+    "f1_score": 0.45,
+    "auc_roc": 0.5
+  },
+  "hyperparams": {},
+  "session_id": "session_20250725_100246"
+}

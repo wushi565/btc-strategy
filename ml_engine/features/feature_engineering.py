@@ -594,17 +594,43 @@ class FeatureEngineering:
         return df
     
     def _create_target_variable(self, df: pd.DataFrame) -> pd.DataFrame:
-        """创建目标变量"""
+        """创建目标变量 - 使用动态阈值避免信号过于集中"""
         # 保存原始索引
         original_index = df.index.copy()
         
         # 基于未来收益创建目标
         future_return_periods = self.feature_config.get("target_periods", [1, 3, 5])
         
+        # 动态阈值配置
+        base_threshold = self.feature_config.get("target_threshold", 0.005)  # 基础阈值0.5%
+        adaptive_threshold = self.feature_config.get("adaptive_threshold", True)
+        min_signal_ratio = self.feature_config.get("min_signal_ratio", 0.2)  # 最小信号比例20%
+        max_signal_ratio = self.feature_config.get("max_signal_ratio", 0.8)  # 最大信号比例80%
+        
         for period in future_return_periods:
             future_return = df['close'].shift(-period) / df['close'] - 1
-            # 将连续目标转换为分类目标
-            df[f'target_{period}'] = (future_return > 0).astype(int)
+            
+            if adaptive_threshold:
+                # 动态调整阈值以确保信号分布合理
+                threshold = self._calculate_adaptive_threshold(
+                    future_return, base_threshold, min_signal_ratio, max_signal_ratio
+                )
+                print(f"期间{period}的自适应阈值: {threshold:.4f}")
+            else:
+                threshold = base_threshold
+            
+            # 使用动态阈值创建分类目标
+            df[f'target_{period}'] = (future_return > threshold).astype(int)
+            
+            # 信号质量检查
+            signal_ratio = df[f'target_{period}'].mean()
+            print(f"期间{period}的信号比例: {signal_ratio:.3f}")
+            
+            # 如果信号分布仍然极端，使用多级阈值
+            if signal_ratio < 0.1 or signal_ratio > 0.9:
+                df[f'target_{period}'] = self._create_multilevel_target(
+                    future_return, period
+                )
         
         # 使用主要目标
         main_target_period = future_return_periods[0]
@@ -615,6 +641,77 @@ class FeatureEngineering:
             df = df.reindex(original_index)
             
         return df
+    
+    def _calculate_adaptive_threshold(self, returns: pd.Series, base_threshold: float, 
+                                    min_ratio: float, max_ratio: float) -> float:
+        """计算自适应阈值以确保合理的信号分布"""
+        # 移除NaN值
+        clean_returns = returns.dropna()
+        if len(clean_returns) == 0:
+            return base_threshold
+        
+        # 计算收益率的统计特征
+        std_return = clean_returns.std()
+        mean_abs_return = clean_returns.abs().mean()
+        
+        # 尝试不同阈值，找到最优分布
+        test_thresholds = [
+            base_threshold,
+            std_return * 0.5,
+            std_return * 1.0,
+            mean_abs_return * 0.5,
+            mean_abs_return * 1.0,
+            clean_returns.quantile(0.6),
+            clean_returns.quantile(0.7),
+            clean_returns.quantile(0.8)
+        ]
+        
+        best_threshold = base_threshold
+        best_score = float('inf')
+        
+        for threshold in test_thresholds:
+            if threshold <= 0:
+                continue
+                
+            signal_ratio = (clean_returns > threshold).mean()
+            
+            # 评分函数：偏离目标范围的程度
+            if signal_ratio < min_ratio:
+                score = (min_ratio - signal_ratio) * 2  # 惩罚信号过少
+            elif signal_ratio > max_ratio:
+                score = (signal_ratio - max_ratio) * 2  # 惩罚信号过多
+            else:
+                score = 0  # 在理想范围内
+            
+            if score < best_score:
+                best_score = score
+                best_threshold = threshold
+        
+        return max(best_threshold, 0.001)  # 确保阈值不为0
+    
+    def _create_multilevel_target(self, returns: pd.Series, period: int) -> pd.Series:
+        """当简单阈值失败时，使用多级分类目标"""
+        clean_returns = returns.dropna()
+        if len(clean_returns) == 0:
+            return pd.Series(0, index=returns.index)
+        
+        # 使用分位数创建多级目标
+        q25 = clean_returns.quantile(0.25)
+        q75 = clean_returns.quantile(0.75)
+        
+        # 三级分类：强卖出(0), 持有(1), 强买入(2)，然后转为二分类
+        conditions = [
+            returns <= q25,  # 强卖出
+            returns >= q75   # 强买入
+        ]
+        choices = [0, 1]
+        
+        multilevel_target = pd.Series(0, index=returns.index)
+        for i, condition in enumerate(conditions):
+            multilevel_target[condition] = choices[i]
+        
+        print(f"期间{period}使用多级分类，买入信号比例: {multilevel_target.mean():.3f}")
+        return multilevel_target
     
     def _clean_infinite_values(self, df: pd.DataFrame) -> pd.DataFrame:
         """清理无穷大值和异常值"""

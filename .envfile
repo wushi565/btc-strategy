@@ -1,0 +1,3 @@
+export OPENAI_API_KEY="sk-07e4f43174564115b4c0089b72dc1717"
+export OPENAI_BASE_URL="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+export OPENAI_MODEL="qwen3-coder-plus"

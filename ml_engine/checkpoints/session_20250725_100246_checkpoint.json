@@ -1,0 +1,82 @@
+{
+  "session_id": "session_20250725_100246",
+  "saved_at": "2025-07-25T10:21:51.819762",
+  "training_progress": {
+    "session_id": "session_20250725_100246",
+    "start_time": "2025-07-25T10:02:46.987111",
+    "training_config": {
+      "model_types": [
+        "random_forest",
+        "xgboost",
+        "lightgbm",
+        "logistic_regression"
+      ],
+      "test_size": 0.2,
+      "enable_hyperopt": true,
+      "n_trials": 100
+    },
+    "model_types": [
+      "random_forest",
+      "xgboost",
+      "lightgbm",
+      "logistic_regression"
+    ],
+    "completed_models": [
+      "random_forest",
+      "lightgbm",
+      "xgboost",
+      "logistic_regression"
+    ],
+    "failed_models": [],
+    "current_model": null,
+    "total_models": 4,
+    "status": "completed",
+    "data_shape": {
+      "n_samples": 40672,
+      "n_features": 150
+    },
+    "end_time": "2025-07-25T10:21:51.819762",
+    "final_results": {
+      "model_paths": {
+        "random_forest": "models/random_forest_20250725_102151.joblib",
+        "lightgbm": "models/lightgbm_20250725_102151.joblib",
+        "xgboost": "models/xgboost_20250725_102151.joblib",
+        "logistic_regression": "models/logistic_regression_20250725_102151.joblib"
+      },
+      "metrics": {
+        "random_forest": {
+          "accuracy": 0.6,
+          "precision": 0.36,
+          "recall": 0.6,
+          "f1_score": 0.45,
+          "auc_roc": 0.5
+        },
+        "lightgbm": {
+          "accuracy": 0.6,
+          "precision": 0.36,
+          "recall": 0.6,
+          "f1_score": 0.45,
+          "auc_roc": 0.5
+        },
+        "xgboost": {
+          "accuracy": 0.6,
+          "precision": 0.36,
+          "recall": 0.6,
+          "f1_score": 0.45,
+          "auc_roc": 0.5
+        },
+        "logistic_regression": {
+          "accuracy": 0.6,
+          "precision": 0.36,
+          "recall": 0.6,
+          "f1_score": 0.45,
+          "auc_roc": 0.5
+        }
+      },
+      "training_samples": 32537,
+      "test_samples": 8135,
+      "feature_count": 150
+    }
+  },
+  "checkpoint_version": "1.0"
+}

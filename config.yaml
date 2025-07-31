@@ -24,3 +24,290 @@ backtest:
   initial_capital: 10000.0
   leverage: 1.0
   risk_per_trade: 0.02
+
+# 启用机器学习功能
+enable_ml: true  # 改为true启用机器学习
+
+# ML信号增强器配置
+ml_signal_enhancer:
+  # 模型训练器配置
+  model_trainer:
+    enable_checkpoints: true  # 启用训练检查点功能
+    model_types: ["random_forest", "xgboost", "lightgbm", "logistic_regression"]
+    test_size: 0.2
+    validation_size: 0.2
+    random_state: 42
+    cv_folds: 5
+    enable_hyperopt: true
+    optuna_trials: 100
+    model_save_path: "models/"
+  
+  # 训练检查点配置
+  training_checkpoint:
+    checkpoint_dir: "ml_engine/checkpoints/"  # 检查点保存目录
+    auto_save_interval: 1  # 每训练N个模型自动保存检查点
+    max_checkpoints: 5     # 最大保留检查点数量
+    enable_data_checkpoints: true  # 是否保存训练数据到检查点
+  
+  # 模型版本管理器配置
+  model_version_manager:
+    base_path: "models/versions/"
+    max_versions: 10
+    auto_cleanup: true
+  
+  # 模型集成器配置
+  model_ensemble:
+    method: "voting"  # voting, stacking, weighted
+    voting_type: "soft"  # hard, soft
+    meta_learner: "logistic_regression"
+
+# 机器学习集成设置
+ml_integration:
+  confidence_threshold: 0.6      # 执行交易的最低置信度
+  signal_weight_technical: 0.6   # 技术信号权重
+  signal_weight_ml: 0.4          # 机器学习信号权重
+
+# 特征工程设置
+feature_engineering:
+  lookback_periods: [5, 10, 20, 50]
+  ma_periods: [7, 14, 21, 50, 100, 200]
+  volatility_periods: [10, 20, 30]
+  volume_periods: [10, 20]
+  target_periods: [1, 3, 5]
+  scale_features: true
+  
+  # 目标变量生成参数
+  target_threshold: 0.005        # 基础阈值 0.5% (考虑交易成本)
+  adaptive_threshold: true       # 启用自适应阈值调整
+  min_signal_ratio: 0.2          # 最小信号比例 20%
+  max_signal_ratio: 0.8          # 最大信号比例 80%
+
+# 机器学习引擎设置
+ml_signal_enhancer:
+  confidence_threshold: 0.6
+  update_frequency: 24   # 更新频率(小时)
+  enable_online_learning: true
+  model_types:
+    - "random_forest"
+    - "xgboost"
+    - "lightgbm"
+  ensemble_method: "voting"
+  test_size: 0.2
+  scale_features: true
+
+# =============================================================================
+# 高级风险管理系统配置 (需求3的实现)
+# =============================================================================
+risk_management_system:
+  # 基本设置
+  enabled: true  # 设置为true启用高级风险管理系统
+  
+  # 风险管理器配置
+  risk_manager:
+    # 风险限制
+    max_daily_loss: 1000          # 每日最大损失(USDT)
+    max_drawdown: 0.1             # 最大回撤 10%
+    max_position_value: 50000     # 单个仓位最大价值
+    max_leverage: 10              # 最大杠杆倍数
+    risk_per_trade: 0.02          # 每笔交易风险比例 2%
+    max_total_exposure: 100000    # 最大总风险敞口
+    
+    # 调整参数
+    adjustment_speed: 0.5         # 调整速度因子
+    max_adjustment_ratio: 2.0     # 最大单次调整比例
+    
+  # 动态头寸规模计算器配置
+  position_sizer:
+    # 计算方法
+    default_position_method: "adaptive"  # fixed_percentage, kelly_criterion, volatility_adjusted, var_based, adaptive
+    
+    # 基础参数
+    account_value: 10000          # 账户价值
+    max_risk_per_trade: 0.02      # 每笔交易最大风险 2%
+    min_position_size: 0.001      # 最小仓位大小
+    max_position_size: 0.2        # 最大仓位比例 20%
+    
+    # Kelly准则参数
+    kelly_lookback_period: 30     # Kelly计算回看期
+    max_kelly_fraction: 0.25      # 最大Kelly分数
+    min_kelly_fraction: 0.01      # 最小Kelly分数
+    
+    # 波动率参数
+    volatility_lookback: 20       # 波动率计算回看期
+    default_volatility: 0.02      # 默认波动率 2%
+    volatility_target: 0.02       # 目标波动率
+    confidence_threshold: 0.6     # 置信度阈值
+    
+  # 杠杆调整器配置
+  leverage_adjuster:
+    # 基础杠杆设置
+    base_leverage: 3.0            # 基础杠杆倍数
+    max_leverage: 10.0            # 最大杠杆
+    min_leverage: 1.0             # 最小杠杆
+    
+    # 波动率阈值
+    low_vol_threshold: 0.01       # 低波动率阈值 1%
+    medium_vol_threshold: 0.03    # 中波动率阈值 3%
+    high_vol_threshold: 0.05      # 高波动率阈值 5%
+    
+    # 调整参数
+    adjustment_speed: 0.5         # 杠杆调整速度
+    volatility_target: 0.02       # 目标波动率
+    max_adjustment_ratio: 2.0     # 最大调整比例
+    
+    # 波动率模型
+    volatility_lookback: 20       # 波动率回看期
+    ewma_alpha: 0.94              # EWMA平滑参数
+    min_observations: 10          # 最小观测数量
+    
+  # 风险指标计算器配置
+  risk_metrics:
+    # VaR计算
+    var_confidence_levels: [0.90, 0.95, 0.99]  # VaR置信水平
+    var_lookback_period: 252      # VaR计算回看期
+    monte_carlo_simulations: 10000 # 蒙特卡洛模拟次数
+    
+    # 缓存设置
+    enable_cache: true            # 启用计算缓存
+    cache_ttl: 3600              # 缓存生存时间(秒)
+    max_cache_size: 1000         # 最大缓存大小
+    
+    # 计算参数
+    annual_trading_days: 252      # 年化交易天数
+    risk_free_rate: 0.02         # 无风险利率
+    
+  # 自适应止损系统配置
+  adaptive_stop_loss:
+    # 默认设置
+    default_stop_distance: 0.02   # 默认止损距离 2%
+    min_stop_distance: 0.005      # 最小止损距离 0.5%
+    max_stop_distance: 0.1        # 最大止损距离 10%
+    
+    # ATR参数
+    atr_period: 14                # ATR计算周期
+    atr_multiplier: 2.0           # ATR倍数
+    
+    # 波动率参数
+    volatility_period: 20         # 波动率计算周期
+    volatility_multiplier: 2.0    # 波动率倍数
+    
+    # 追踪止损
+    trail_start_profit: 0.02      # 开始追踪的利润阈值
+    trail_step: 0.005            # 追踪步长
+    
+    # 市场状态阈值
+    low_volatility_threshold: 0.01   # 低波动率阈值
+    high_volatility_threshold: 0.04  # 高波动率阈值
+    trend_strength_threshold: 0.7    # 趋势强度阈值
+    
+  # 回撤控制系统配置
+  drawdown_controller:
+    # 回撤阈值
+    warning_threshold: 0.05       # 警告阈值 5%
+    danger_threshold: 0.08        # 危险阈值 8%
+    critical_threshold: 0.12      # 临界阈值 12%
+    emergency_threshold: 0.15     # 紧急阈值 15%
+    
+    # 风险降低措施
+    reduce_position_threshold: 0.05  # 减仓阈值
+    close_positions_threshold: 0.10  # 平仓阈值
+    pause_trading_threshold: 0.12    # 暂停交易阈值
+    emergency_exit_threshold: 0.15   # 紧急退出阈值
+    
+    # 减仓参数
+    position_reduction_factor: 0.5   # 减仓比例 50%
+    min_position_after_reduction: 0.1 # 减仓后最小仓位
+    
+    # 恢复参数
+    recovery_threshold: 0.03      # 恢复阈值
+    recovery_period: 24           # 恢复观察期(小时)
+    
+    # 历史数据管理
+    max_history_size: 1000        # 最大历史记录数
+    snapshot_interval: 300        # 快照间隔(秒)
+    
+  # 监控和报告
+  monitoring:
+    enable_real_time_monitoring: true  # 启用实时监控
+    monitoring_interval: 30       # 监控间隔(秒)
+    enable_alerts: true           # 启用警报
+    alert_channels: ["console", "log"]  # 警报渠道
+    
+  # 日志配置
+  logging:
+    log_dir: 'logs/risk_management'  # 日志目录true
+    log_level: 'INFO'             # 日志级别
+    max_file_size: 10485760       # 最大文件大小 10MB
+    backup_count: 5               # 备份文件数量
+live_trading_engine:
+  # 基本设置
+  enabled: true  # 设置为true启用实时交易引擎
+  
+  # WebSocket数据管理配置
+  websocket:
+    exchange: 'binance'
+    testnet: true  # 生产环境设置为false
+    auto_reconnect: true
+    heartbeat_interval: 30
+    connection_timeout: 10
+    max_reconnect_attempts: 5
+    reconnect_delay: 5
+    
+  # 订单管理系统配置
+  orders:
+    exchange: 'binance'
+    testnet: true  # 生产环境设置为false
+    api_key: "IKlHc132qbeaHx3iADYBXeHWMh3KewowDkrExfXfUszVBxZRThl6JokhmOzRooOE"  # 从环境变量或单独配置文件加载
+    api_secret: "dy4Vh7oM83daSzYRo5Cw7djAOljVewYHkfVyVGhIBQFEIpqKHFWdFVYLrDnkeqd7"  # 从环境变量或单独配置文件加载
+    max_orders_per_symbol: 10
+    max_order_amount: 100000
+    order_timeout: 300
+    enable_rate_limit: true
+    
+  # 仓位管理配置
+  positions:
+    max_position_size: 1000000  # 最大仓位价值(USDT)
+    max_leverage: 10  # 最大杠杆倍数
+    risk_free_rate: 0.02  # 无风险利率
+    margin_mode: 'isolated'  # isolated 或 cross
+    
+  # 状态同步配置
+  sync:
+    sync_interval: 60  # 同步间隔(秒)
+    max_sync_lag: 300  # 最大同步延迟(秒)
+    enable_recovery: true
+    
+  # 追踪止损配置
+  trailing_stops:
+    default_distance: 2.0  # 默认追踪距离 2%
+    min_distance: 0.5      # 最小追踪距离 0.5%
+    max_distance: 10.0     # 最大追踪距离 10%
+    update_interval: 5     # 更新间隔(秒)
+    
+  # 日志配置
+  logging:
+    log_dir: 'logs/live_trading'
+    log_level: 'INFO'  # DEBUG, INFO, WARNING, ERROR
+    max_file_size: 10485760  # 10MB
+    backup_count: 5
+    enable_console: true
+    enable_file: true
+    
+  # 风险管理配置
+  risk_management:
+    max_daily_loss: 1000  # 每日最大损失(USDT)
+    max_drawdown: 0.1     # 最大回撤 10%
+    position_size_factor: 0.02  # 仓位大小因子
+    enable_emergency_stop: true
+    
+  # 紧急设置
+  emergency:
+    close_all_positions: false  # 紧急情况是否平所有仓
+    enable_kill_switch: true    # 启用紧急停止开关
+    max_consecutive_losses: 5   # 最大连续亏损次数
+    
+  # 性能监控
+  monitoring:
+    enable_metrics: true
+    metrics_interval: 30  # 性能指标更新间隔(秒)
+    health_check_interval: 60  # 健康检查间隔(秒)

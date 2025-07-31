@@ -1,0 +1,147 @@
+# =============================================================================
+# 实时交易执行引擎配置示例
+# =============================================================================
+# 这个文件展示了如何配置实时交易执行引擎
+# 将需要的配置复制到你的config.yaml文件中
+
+live_trading_engine:
+  # 基本设置
+  enabled: true  # 设置为true启用实时交易引擎
+  
+  # WebSocket数据管理配置
+  websocket:
+    exchange: 'binance'           # 交易所 (binance, okx, bybit)
+    testnet: true                 # 测试网 (生产环境设置为false)
+    auto_reconnect: true          # 自动重连
+    heartbeat_interval: 30        # 心跳间隔(秒)
+    connection_timeout: 10        # 连接超时(秒)
+    max_reconnect_attempts: 5     # 最大重连次数
+    reconnect_delay: 5            # 重连延迟(秒)
+    
+  # 订单管理系统配置
+  orders:
+    exchange: 'binance'           # 交易所
+    testnet: true                 # 测试网 (生产环境设置为false)
+    
+    # API密钥 (建议从环境变量或单独文件加载)
+    api_key: "your_binance_api_key_here"
+    api_secret: "your_binance_api_secret_here"
+    
+    # 订单限制
+    max_orders_per_symbol: 10     # 每个交易对最大订单数
+    max_order_amount: 100000      # 最大订单金额(USDT)
+    order_timeout: 300            # 订单超时时间(秒)
+    enable_rate_limit: true       # 启用速率限制
+    
+  # 仓位管理配置
+  positions:
+    max_position_size: 1000000    # 最大仓位价值(USDT)
+    max_leverage: 10              # 最大杠杆倍数
+    risk_free_rate: 0.02          # 无风险利率
+    margin_mode: 'isolated'       # 保证金模式: isolated 或 cross
+    
+  # 状态同步配置
+  sync:
+    sync_interval: 60             # 同步间隔(秒)
+    max_sync_lag: 300             # 最大同步延迟(秒)
+    enable_recovery: true         # 启用恢复机制
+    
+  # 追踪止损配置
+  trailing_stops:
+    default_distance: 2.0         # 默认追踪距离 2%
+    min_distance: 0.5             # 最小追踪距离 0.5%
+    max_distance: 10.0            # 最大追踪距离 10%
+    update_interval: 5            # 更新间隔(秒)
+    
+  # 日志配置
+  logging:
+    log_dir: 'logs/live_trading'  # 日志目录
+    log_level: 'INFO'             # 日志级别: DEBUG, INFO, WARNING, ERROR
+    max_file_size: 10485760       # 最大文件大小 10MB
+    backup_count: 5               # 备份文件数量
+    enable_console: true          # 启用控制台输出
+    enable_file: true             # 启用文件输出
+    
+  # 风险管理配置
+  risk_management:
+    max_daily_loss: 1000          # 每日最大损失(USDT)
+    max_drawdown: 0.1             # 最大回撤 10%
+    position_size_factor: 0.02    # 仓位大小因子 2%
+    enable_emergency_stop: true   # 启用紧急停止
+    
+  # 紧急设置
+  emergency:
+    close_all_positions: false    # 紧急情况是否平所有仓位
+    enable_kill_switch: true      # 启用紧急停止开关
+    max_consecutive_losses: 5     # 最大连续亏损次数
+    
+  # 性能监控
+  monitoring:
+    enable_metrics: true          # 启用性能指标
+    metrics_interval: 30          # 性能指标更新间隔(秒)
+    health_check_interval: 60     # 健康检查间隔(秒)
+
+# =============================================================================
+# 安全建议
+# =============================================================================
+# 1. API密钥安全：
+#    - 不要将API密钥直接写在配置文件中
+#    - 使用环境变量：os.getenv('BINANCE_API_KEY')
+#    - 或创建单独的api_config.yaml文件并加入.gitignore
+#
+# 2. 测试环境：
+#    - 首次使用时务必设置 testnet: true
+#    - 在测试网上验证所有功能正常后再切换到生产环境
+#
+# 3. 风险控制：
+#    - 设置合理的max_daily_loss和max_drawdown
+#    - 从小资金开始测试
+#    - 确保emergency功能正常工作
+
+# =============================================================================
+# 环境变量示例
+# =============================================================================
+# 在您的系统中设置以下环境变量：
+# export BINANCE_API_KEY="your_api_key"
+# export BINANCE_API_SECRET="your_api_secret"
+# 
+# 然后在config.yaml中使用：
+# orders:
+#   api_key: ${BINANCE_API_KEY}
+#   api_secret: ${BINANCE_API_SECRET}
+
+# =============================================================================
+# API密钥权限要求
+# =============================================================================
+# 确保您的API密钥具有以下权限：
+# - 现货交易 (如果交易现货)
+# - 期货交易 (如果交易期货)
+# - 读取账户信息
+# - 下单权限
+# 
+# 建议关闭以下权限以提高安全性：
+# - 提现权限
+# - 子账户管理
+
+# =============================================================================
+# 不同交易所配置示例
+# =============================================================================
+
+# Binance 配置示例：
+# websocket:
+#   exchange: 'binance'
+# orders:
+#   exchange: 'binance'
+
+# OKX 配置示例：
+# websocket:
+#   exchange: 'okx'
+# orders:
+#   exchange: 'okx'
+#   passphrase: "your_passphrase"  # OKX需要额外的passphrase
+
+# Bybit 配置示例：
+# websocket:
+#   exchange: 'bybit'
+# orders:
+#   exchange: 'bybit'

@@ -523,6 +523,527 @@ def live_signal_menu(system):
     else:
         print("数据管理器初始化失败，无法列出本地文件")
 
+def risk_management_menu(config):
+    """高级风险管理系统菜单"""
+    print("\n===== 高级风险管理系统 =====")
+    
+    # 检查是否启用了风险管理系统
+    risk_config = config.get('risk_management_system', {})
+    if not risk_config.get('enabled', False):
+        print("⚠️  高级风险管理系统未启用!")
+        print("要启用风险管理系统，请在config.yaml中设置:")
+        print("risk_management_system:")
+        print("  enabled: true")
+        print("\n建议启用此系统以获得:")
+        print("• 动态头寸规模计算")
+        print("• 智能杠杆调整")
+        print("• 自适应止损系统")
+        print("• 实时回撤控制")
+        print("• 高级风险指标计算")
+        return
+    
+    try:
+        # 导入风险管理系统
+        from risk_management import (
+            RiskManager, PositionSizer, LeverageAdjuster, 
+            RiskMetricsCalculator, AdaptiveStopLoss, DrawdownController
+        )
+        
+        print("初始化风险管理系统...")
+        
+        # 创建系统组件
+        risk_manager = RiskManager(risk_config.get('risk_manager', {}))
+        position_sizer = PositionSizer(risk_config.get('position_sizer', {}))
+        leverage_adjuster = LeverageAdjuster(risk_config.get('leverage_adjuster', {}))
+        risk_metrics = RiskMetricsCalculator(risk_config.get('risk_metrics', {}))
+        adaptive_stop_loss = AdaptiveStopLoss(risk_config.get('adaptive_stop_loss', {}))
+        drawdown_controller = DrawdownController()
+        
+        print("✅ 风险管理系统初始化成功")
+        
+        # 菜单选项
+        while True:
+            print("\n选择操作:")
+            print("1. 查看系统状态")
+            print("2. 计算头寸大小")
+            print("3. 调整杠杆倍数")
+            print("4. 设置止损水平")
+            print("5. 分析风险指标")
+            print("6. 回撤控制状态")
+            print("7. 风险管理配置")
+            print("8. 系统使用指南")
+            print("0. 返回主菜单")
+            
+            choice = input("请选择操作 (0-8): ")
+            
+            if choice == "1":
+                # 查看系统状态
+                print("\n===== 风险管理系统状态 =====")
+                
+                # 风险管理器状态
+                risk_status = risk_manager.get_current_status()
+                print(f"风险限制检查: {'启用' if risk_status.get('monitoring_enabled') else '停用'}")
+                print(f"当前风险水平: {risk_status.get('current_risk_level', 'UNKNOWN')}")
+                print(f"每日损失: {risk_status.get('daily_loss', 0):.2f} USDT")
+                print(f"当前回撤: {risk_status.get('current_drawdown', 0):.2%}")
+                
+                # 头寸规模计算器状态
+                print(f"\n头寸计算方法: {position_sizer.current_method}")
+                print(f"账户价值: {position_sizer.account_value:.2f} USDT")
+                
+                # 杠杆调整器状态
+                leverage_status = leverage_adjuster.get_system_status()
+                print(f"\n当前基础杠杆: {leverage_status.get('base_leverage', 0):.1f}x")
+                print(f"市场波动率: {leverage_status.get('current_volatility', 0):.2%}")
+                
+                # 止损系统状态
+                stop_status = adaptive_stop_loss.get_system_status()
+                print(f"\n活跃止损: {stop_status.get('active_stops', 0)}")
+                print(f"跟踪的交易对: {stop_status.get('symbols_tracked', 0)}")
+                
+                # 回撤控制状态
+                dd_status = drawdown_controller.get_current_status()
+                print(f"\n回撤状态: {'正在回撤' if dd_status.get('is_in_drawdown') else '正常'}")
+                print(f"当前回撤: {dd_status.get('current_drawdown', 0):.2%}")
+                print(f"风险降低措施: {dd_status.get('current_reduction_level', 'NONE')}")
+            
+            elif choice == "2":
+                # 计算头寸大小
+                print("\n===== 头寸大小计算 =====")
+                
+                try:
+                    entry_price = float(input("入场价格: "))
+                    stop_loss = float(input("止损价格: "))
+                    confidence = float(input("信号置信度 (0-1): "))
+                    
+                    # 计算头寸大小
+                    position_data = position_sizer.calculate_position_size(
+                        entry_price=entry_price,
+                        stop_loss=stop_loss,
+                        confidence=confidence
+                    )
+                    
+                    print(f"\n建议头寸大小: {position_data.position_size:.4f}")
+                    print(f"风险金额: {position_data.risk_amount:.2f} USDT")
+                    print(f"计算方法: {position_data.method}")
+                    print(f"Kelly分数: {position_data.kelly_fraction:.4f}")
+                    
+                except ValueError:
+                    print("❌ 请输入有效的数值")
+                except Exception as e:
+                    print(f"❌ 计算失败: {e}")
+            
+            elif choice == "3":
+                # 调整杠杆倍数
+                print("\n===== 杠杆倍数调整 =====")
+                
+                try:
+                    symbol = input("交易对 (如BTC/USDT): ")
+                    current_leverage = float(input("当前杠杆倍数: "))
+                    
+                    # 模拟市场数据
+                    market_data = {
+                        'price': 50000.0,
+                        'volatility': 0.02,
+                        'volume': 1000000
+                    }
+                    
+                    # 调整杠杆
+                    adjustment = leverage_adjuster.adjust_leverage(
+                        symbol=symbol,
+                        current_leverage=current_leverage,
+                        market_data=market_data
+                    )
+                    
+                    print(f"\n当前杠杆: {current_leverage:.1f}x")
+                    print(f"建议杠杆: {adjustment.recommended_leverage:.1f}x")
+                    print(f"调整原因: {adjustment.reason}")
+                    print(f"风险评估: {adjustment.risk_assessment}")
+                    print(f"市场状态: {adjustment.market_regime}")
+                    
+                except ValueError:
+                    print("❌ 请输入有效的数值")
+                except Exception as e:
+                    print(f"❌ 调整失败: {e}")
+            
+            elif choice == "4":
+                # 设置止损水平
+                print("\n===== 自适应止损设置 =====")
+                
+                try:
+                    symbol = input("交易对 (如BTC/USDT): ")
+                    entry_price = float(input("入场价格: "))
+                    position_size = float(input("仓位大小: "))
+                    side = input("仓位方向 (long/short): ").lower()
+                    
+                    from risk_management.adaptive_stop_loss import PositionSide
+                    position_side = PositionSide.LONG if side == 'long' else PositionSide.SHORT
+                    
+                    # 设置止损
+                    import asyncio
+                    async def set_stop():
+                        return await adaptive_stop_loss.set_stop_loss(
+                            symbol=symbol,
+                            position_side=position_side,
+                            entry_price=entry_price,
+                            position_size=position_size
+                        )
+                    
+                    stop_level = asyncio.run(set_stop())
+                    
+                    print(f"\n✅ 止损设置成功")
+                    print(f"入场价格: {stop_level.initial_price:.2f}")
+                    print(f"止损价格: {stop_level.stop_price:.2f}")
+                    print(f"止损类型: {stop_level.stop_type.value}")
+                    print(f"风险距离: {stop_level.get_distance_pct():.2%}")
+                    print(f"信心度: {stop_level.confidence:.2f}")
+                    
+                except ValueError:
+                    print("❌ 请输入有效的数值")
+                except Exception as e:
+                    print(f"❌ 设置失败: {e}")
+            
+            elif choice == "5":
+                # 分析风险指标
+                print("\n===== 风险指标分析 =====")
+                
+                try:
+                    symbol = input("交易对 (如BTC/USDT): ")
+                    
+                    # 模拟一些历史数据
+                    import numpy as np
+                    from datetime import datetime, timedelta
+                    
+                    # 生成模拟价格数据
+                    base_price = 50000
+                    dates = [datetime.now() - timedelta(days=i) for i in range(100, 0, -1)]
+                    prices = [base_price * (1 + np.random.normal(0, 0.02)) for _ in range(100)]
+                    
+                    # 更新价格数据
+                    for i, (date, price) in enumerate(zip(dates, prices)):
+                        risk_metrics.update_price_data(symbol, price, date)
+                    
+                    # 生成风险报告
+                    report = risk_metrics.generate_risk_report(symbol)
+                    
+                    print(f"\n===== {symbol} 风险分析报告 =====")
+                    print(f"报告时间: {report.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"数据点数: {len(report.metrics)}")
+                    
+                    for metric in report.metrics:
+                        confidence_str = f" ({metric.confidence_level.value:.1%})" if metric.confidence_level else ""
+                        print(f"{metric.metric_type.value}: {metric.value:.4f}{confidence_str}")
+                    
+                    print(f"\n风险评估: {report.summary.get('risk_assessment', '未知')}")
+                    
+                except Exception as e:
+                    print(f"❌ 分析失败: {e}")
+            
+            elif choice == "6":
+                # 回撤控制状态
+                print("\n===== 回撤控制状态 =====")
+                
+                status = drawdown_controller.get_current_status()
+                
+                print(f"是否在回撤: {'是' if status['is_in_drawdown'] else '否'}")
+                print(f"当前回撤: {status['current_drawdown']:.2%}")
+                print(f"峰值价值: {status['peak_value']:.2f}")
+                print(f"当前价值: {status['current_value']:.2f}")
+                print(f"风险降低措施: {status['current_reduction_level']}")
+                print(f"最后更新: {status['last_update']}")
+                
+                # 显示统计信息
+                stats = drawdown_controller.get_statistics()
+                print(f"\n历史统计:")
+                print(f"总回撤事件: {stats['stats']['total_drawdown_events']}")
+                print(f"最大历史回撤: {stats['stats']['max_historical_drawdown']:.2%}")
+                print(f"平均回撤持续时间: {stats['stats']['avg_drawdown_duration']:.1f}小时")
+            
+            elif choice == "7":
+                # 风险管理配置
+                print("\n===== 风险管理配置 =====")
+                print("当前配置:")
+                
+                for component, config_data in risk_config.items():
+                    if isinstance(config_data, dict):
+                        print(f"\n{component}:")
+                        for key, value in config_data.items():
+                            print(f"  {key}: {value}")
+                
+                print("\n要修改配置，请编辑config.yaml文件中的risk_management_system部分")
+            
+            elif choice == "8":
+                # 系统使用指南
+                show_risk_management_guide()
+            
+            elif choice == "0":
+                # 返回主菜单
+                break
+            
+            else:
+                print("无效的选择!")
+    
+    except ImportError as e:
+        print(f"❌ 导入风险管理系统失败: {e}")
+        print("请确保risk_management模块已正确安装")
+    except Exception as e:
+        print(f"❌ 风险管理系统初始化失败: {e}")
+
+def show_risk_management_guide():
+    """显示风险管理系统使用指南"""
+    print("\n" + "="*60)
+    print("           高级风险管理系统使用指南")
+    print("="*60)
+    
+    print("\n📚 系统概述:")
+    print("高级风险管理系统包含6个核心组件，为您的交易提供全方位的风险控制。")
+    
+    print("\n🔧 系统组件:")
+    print("1. RiskManager        - 主控制器，监控总体风险水平")
+    print("2. PositionSizer      - 动态头寸规模计算，支持Kelly准则")
+    print("3. LeverageAdjuster   - 基于市场波动率的智能杠杆调整")
+    print("4. RiskMetrics        - 高级风险指标计算(VaR, CVaR, 夏普比率等)")
+    print("5. AdaptiveStopLoss   - 自适应止损系统，支持多种止损策略")
+    print("6. DrawdownController - 回撤控制系统，自动风险降低措施")
+    
+    print("\n⚙️ 快速启用步骤:")
+    print("1. 编辑config.yaml文件")
+    print("2. 设置 risk_management_system.enabled: true")
+    print("3. 根据需要调整各组件参数")
+    print("4. 重启系统生效")
+    
+    print("\n💡 使用建议:")
+    print("• 建议先在测试环境中配置和测试系统")
+    print("• 根据您的风险承受能力调整参数")
+    print("• 定期监控风险指标和回撤状态")
+    print("• 在高波动市场中适当降低杠杆和仓位")
+    
+    print("\n⚠️ 风险提示:")
+    print("• 风险管理系统无法消除所有交易风险")
+    print("• 建议结合人工判断和市场分析")
+    print("• 在极端市场条件下，系统可能无法完全保护资金")
+    print("• 请根据实际情况调整系统参数")
+    
+    print("\n📖 详细配置说明:")
+    print("每个组件都有详细的配置选项，请参考config.yaml中的注释说明。")
+    print("如需技术支持，请查看risk_management目录下的源代码和文档。")
+    
+    print("\n" + "="*60)
+    print("           感谢使用高级风险管理系统!")
+    print("="*60)
+
+def live_trading_engine_menu(config):
+    """实时交易执行引擎菜单"""
+    print("\n===== 实时交易执行引擎 =====")
+    
+    # 检查是否启用了实时交易引擎
+    live_trading_config = config.get('live_trading_engine', {})
+    if not live_trading_config.get('enabled', False):
+        print("⚠️  实时交易引擎未启用!")
+        print("要启用实时交易引擎，请在config.yaml中设置:")
+        print("live_trading_engine:")
+        print("  enabled: true")
+        print("  # 并配置API密钥和其他参数")
+        return
+    
+    # 检查API密钥配置
+    orders_config = live_trading_config.get('orders', {})
+    if not orders_config.get('api_key') or not orders_config.get('api_secret'):
+        print("⚠️  缺少API密钥配置!")
+        print("请在config.yaml中配置:")
+        print("live_trading_engine:")
+        print("  orders:")
+        print("    api_key: 'your_api_key'")
+        print("    api_secret: 'your_api_secret'")
+        return
+    
+    try:
+        # 导入实时交易引擎
+        from live_trading import LiveTradingEngine, TradingSignal, EngineState, EmergencyLevel
+        from datetime import datetime
+        import asyncio
+        
+        print("初始化实时交易引擎...")
+        
+        # 创建引擎配置
+        engine_config = {
+            'websocket': live_trading_config.get('websocket', {}),
+            'orders': live_trading_config.get('orders', {}),
+            'positions': live_trading_config.get('positions', {}),
+            'sync': live_trading_config.get('sync', {}),
+            'trailing_stops': live_trading_config.get('trailing_stops', {}),
+            'logging': live_trading_config.get('logging', {})
+        }
+        
+        # 创建引擎实例
+        engine = LiveTradingEngine(engine_config)
+        
+        print("✅ 实时交易引擎初始化成功")
+        print(f"引擎状态: {engine.get_state().value}")
+        
+        # 菜单选项
+        while True:
+            print("\n选择操作:")
+            print("1. 启动交易引擎")
+            print("2. 停止交易引擎") 
+            print("3. 查看引擎状态")
+            print("4. 提交测试交易信号")
+            print("5. 触发紧急停止")
+            print("6. 恢复交易")
+            print("7. 查看性能指标")
+            print("0. 返回主菜单")
+            
+            choice = input("请选择操作 (0-7): ")
+            
+            if choice == "1":
+                # 启动引擎
+                if engine.get_state() == EngineState.STOPPED:
+                    print("正在启动交易引擎...")
+                    try:
+                        # 创建并运行启动任务
+                        async def start_engine():
+                            await engine.start()
+                        
+                        # 在单独线程中运行
+                        import threading
+                        engine_thread = threading.Thread(
+                            target=lambda: asyncio.run(start_engine()),
+                            daemon=True
+                        )
+                        engine_thread.start()
+                        
+                        # 等待启动完成
+                        import time
+                        time.sleep(3)
+                        
+                        if engine.is_running():
+                            print("✅ 交易引擎启动成功")
+                        else:
+                            print("❌ 交易引擎启动失败")
+                    except Exception as e:
+                        print(f"❌ 启动失败: {e}")
+                else:
+                    print(f"引擎当前状态为 {engine.get_state().value}，无法启动")
+            
+            elif choice == "2":
+                # 停止引擎
+                if engine.is_running():
+                    print("正在停止交易引擎...")
+                    try:
+                        async def stop_engine():
+                            await engine.stop()
+                        
+                        asyncio.run(stop_engine())
+                        print("✅ 交易引擎已停止")
+                    except Exception as e:
+                        print(f"❌ 停止失败: {e}")
+                else:
+                    print("引擎未运行")
+            
+            elif choice == "3":
+                # 查看状态
+                print(f"\n引擎状态: {engine.get_state().value}")
+                print(f"运行中: {'是' if engine.is_running() else '否'}")
+                print(f"手动干预模式: {'是' if engine.is_manual_override() else '否'}")
+                
+                # 获取性能指标
+                metrics = engine.get_performance_metrics()
+                if metrics:
+                    print("\n性能指标:")
+                    for key, value in metrics.items():
+                        print(f"  {key}: {value}")
+            
+            elif choice == "4":
+                # 提交测试信号
+                if engine.is_running():
+                    print("创建测试交易信号...")
+                    
+                    # 创建测试信号
+                    test_signal = TradingSignal(
+                        symbol='BTCUSDT',
+                        action='BUY',
+                        price=50000.0,
+                        quantity=0.001,
+                        confidence=0.8,
+                        timestamp=datetime.now(),
+                        strategy_id='test_strategy',
+                        metadata={'test': True, 'source': 'manual'}
+                    )
+                    
+                    try:
+                        async def submit_signal():
+                            await engine.submit_signal(test_signal)
+                        
+                        asyncio.run(submit_signal())
+                        print("✅ 测试信号已提交")
+                    except Exception as e:
+                        print(f"❌ 提交信号失败: {e}")
+                else:
+                    print("引擎未运行，无法提交信号")
+            
+            elif choice == "5":
+                # 紧急停止
+                print("触发紧急停止...")
+                try:
+                    async def emergency_stop():
+                        await engine.emergency_stop(EmergencyLevel.HIGH, "用户手动触发紧急停止")
+                    
+                    asyncio.run(emergency_stop())
+                    print("✅ 紧急停止已触发")
+                except Exception as e:
+                    print(f"❌ 触发紧急停止失败: {e}")
+            
+            elif choice == "6":
+                # 恢复交易
+                if engine.get_state() == EngineState.PAUSED:
+                    print("恢复交易...")
+                    try:
+                        async def resume():
+                            await engine.resume_trading()
+                        
+                        asyncio.run(resume())
+                        print("✅ 交易已恢复")
+                    except Exception as e:
+                        print(f"❌ 恢复交易失败: {e}")
+                else:
+                    print(f"当前状态 {engine.get_state().value} 无法恢复交易")
+            
+            elif choice == "7":
+                # 查看性能指标
+                metrics = engine.get_performance_metrics()
+                print("\n===== 性能指标 =====")
+                if metrics:
+                    for key, value in metrics.items():
+                        if isinstance(value, float):
+                            print(f"{key}: {value:.2f}")
+                        else:
+                            print(f"{key}: {value}")
+                else:
+                    print("暂无性能数据")
+            
+            elif choice == "0":
+                # 返回主菜单
+                if engine.is_running():
+                    stop_choice = input("引擎正在运行，是否先停止? (y/n): ").lower()
+                    if stop_choice in ['y', 'yes']:
+                        try:
+                            async def stop_engine():
+                                await engine.stop()
+                            asyncio.run(stop_engine())
+                            print("✅ 引擎已停止")
+                        except Exception as e:
+                            print(f"❌ 停止失败: {e}")
+                break
+            
+            else:
+                print("无效的选择!")
+    
+    except ImportError as e:
+        print(f"❌ 导入实时交易引擎失败: {e}")
+        print("请确保live_trading模块已正确安装")
+    except Exception as e:
+        print(f"❌ 实时交易引擎初始化失败: {e}")
+
 def main():
     """
     系统主入口函数 - 整合版本
@@ -562,9 +1083,11 @@ def main():
         print("4. 更新机器学习模型")
         print("5. 杠杆优化工具")
         print("6. 显示系统状态")
+        print("7. 🚀 实时交易执行引擎")
+        print("8. 🛡️ 高级风险管理系统")  # 新增功能
         print("0. 退出")
         
-        function_choice = input("请选择功能 (0-6): ")
+        function_choice = input("请选择功能 (0-8): ")
         
         if function_choice == "1":
             # 回测策略
@@ -603,9 +1126,27 @@ def main():
             print(f"当前策略: {status['current_strategy']}")
             print(f"数据准备: {'完成' if status['data_ready'] else '未完成'}")
             
+            # 检查实时交易引擎状态
+            live_trading_config = config.get('live_trading_engine', {})
+            engine_enabled = live_trading_config.get('enabled', False)
+            print(f"实时交易引擎: {'已启用' if engine_enabled else '未启用'}")
+            
+            # 检查风险管理系统状态
+            risk_config = config.get('risk_management_system', {})
+            risk_enabled = risk_config.get('enabled', False)
+            print(f"风险管理系统: {'已启用' if risk_enabled else '未启用'}")
+            
             # 如果有ML状态，显示ML信息
             if status.get('ml_status'):
                 show_ml_performance(system)
+        
+        elif function_choice == "7":
+            # 实时交易执行引擎
+            live_trading_engine_menu(config)
+        
+        elif function_choice == "8":
+            # 高级风险管理系统
+            risk_management_menu(config)
                 
         elif function_choice == "0":
             # 退出

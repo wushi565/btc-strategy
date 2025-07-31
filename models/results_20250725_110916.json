@@ -1,0 +1,11 @@
+{
+  "random_forest": {
+    "accuracy": 0.9768905497099026
+  },
+  "xgboost": {
+    "accuracy": 0.9783656210050152
+  },
+  "lightgbm": {
+    "accuracy": 0.9799390303864687
+  }
+}
